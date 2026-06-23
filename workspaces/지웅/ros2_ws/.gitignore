@@ -1,0 +1,12 @@
+# ROS 2 / colcon generated artifacts
+build/
+install/
+log/
+
+# Python/test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local runtime artifacts
+*.log
