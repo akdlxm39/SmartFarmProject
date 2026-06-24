@@ -1,0 +1,4 @@
+fastapi
+uvicorn
+websockets
+pymodbus==3.9.2
