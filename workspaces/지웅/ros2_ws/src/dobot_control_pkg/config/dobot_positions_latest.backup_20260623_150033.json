@@ -1,0 +1,270 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-06-23T14:15:20",
+  "source": {
+    "ros_package": "magician_ros2",
+    "tcp_topic": "/dobot_TCP",
+    "raw_topic_optional": "/dobot_pose_raw",
+    "capture_method": "manual_move_then_input_s"
+  },
+  "grid_z_mode": "average",
+  "capture_order": [
+    "harvest_lower_left",
+    "harvest_upper_right",
+    "camera",
+    "defect_box",
+    "conveyor_start"
+  ],
+  "raw_captures": {
+    "harvest_lower_left": {
+      "topic": "/dobot_TCP",
+      "frame_id": "",
+      "stamp": {
+        "sec": 1782191345,
+        "nanosec": 450153592
+      },
+      "position": {
+        "x": 0.051114707946777346,
+        "y": 0.2005518341064453,
+        "z": -0.051369903564453125
+      },
+      "orientation": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.6136061704266316,
+        "w": 0.7896122261049177
+      },
+      "raw_pose_reference": [
+        0.051114707946777346,
+        0.2005518341064453,
+        -0.051369903564453125,
+        75.70142364501953
+      ],
+      "age_sec": 0.002,
+      "captured_key": "harvest_lower_left",
+      "captured_label": "수확 영역 좌하단 위치",
+      "captured_at": "2026-06-23T14:09:05"
+    },
+    "harvest_upper_right": {
+      "topic": "/dobot_TCP",
+      "frame_id": "",
+      "stamp": {
+        "sec": 1782191360,
+        "nanosec": 999411307
+      },
+      "position": {
+        "x": 0.10773833465576171,
+        "y": 0.13119692993164062,
+        "z": -0.050438156127929686
+      },
+      "orientation": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.427415515313003,
+        "w": 0.9040552954713114
+      },
+      "raw_pose_reference": [
+        0.10773833465576171,
+        0.13119692993164062,
+        -0.050438156127929686,
+        50.60730743408203
+      ],
+      "age_sec": 0.021,
+      "captured_key": "harvest_upper_right",
+      "captured_label": "수확 영역 우상단 위치",
+      "captured_at": "2026-06-23T14:09:21"
+    },
+    "camera": {
+      "topic": "/dobot_TCP",
+      "frame_id": "",
+      "stamp": {
+        "sec": 1782191422,
+        "nanosec": 99502644
+      },
+      "position": {
+        "x": 0.23524761962890625,
+        "y": -0.002844233512878418,
+        "z": 0.0673179931640625
+      },
+      "orientation": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.006044859283299642,
+        "w": 0.9999817296712201
+      },
+      "raw_pose_reference": [
+        0.23524761962890625,
+        -0.002844233512878418,
+        0.0673179931640625,
+        -0.6926940679550171
+      ],
+      "age_sec": 0.032,
+      "captured_key": "camera",
+      "captured_label": "촬영 위치",
+      "captured_at": "2026-06-23T14:10:22"
+    },
+    "defect_box": {
+      "topic": "/dobot_TCP",
+      "frame_id": "",
+      "stamp": {
+        "sec": 1782191693,
+        "nanosec": 953743513
+      },
+      "position": {
+        "x": 0.17821820068359376,
+        "y": 0.11377538299560547,
+        "z": 0.03355403900146484
+      },
+      "orientation": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.2802844386799214,
+        "w": 0.9599169929915198
+      },
+      "raw_pose_reference": [
+        0.17821820068359376,
+        0.11377538299560547,
+        0.03355403900146484,
+        32.55436325073242
+      ],
+      "age_sec": 0.006,
+      "captured_key": "defect_box",
+      "captured_label": "불량품 상자 위치",
+      "captured_at": "2026-06-23T14:14:53"
+    },
+    "conveyor_start": {
+      "topic": "/dobot_TCP",
+      "frame_id": "",
+      "stamp": {
+        "sec": 1782191720,
+        "nanosec": 602658041
+      },
+      "position": {
+        "x": 0.10410877227783204,
+        "y": -0.1499163055419922,
+        "z": 0.018265777587890625
+      },
+      "orientation": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -0.46346699235070926,
+        "w": 0.8861141839522645
+      },
+      "raw_pose_reference": [
+        0.10410877227783204,
+        -0.1499163055419922,
+        0.018265777587890625,
+        -55.22210693359375
+      ],
+      "age_sec": 0.036,
+      "captured_key": "conveyor_start",
+      "captured_label": "컨베이어 시작점 위치",
+      "captured_at": "2026-06-23T14:15:20"
+    }
+  },
+  "positions": {
+    "harvest_grid": [
+      {
+        "index": 1,
+        "name": "harvest_1",
+        "x": 0.0511,
+        "y": 0.2006,
+        "z": -0.0509,
+        "row": 0,
+        "col": 0
+      },
+      {
+        "index": 2,
+        "name": "harvest_2",
+        "x": 0.0794,
+        "y": 0.2006,
+        "z": -0.0509,
+        "row": 0,
+        "col": 1
+      },
+      {
+        "index": 3,
+        "name": "harvest_3",
+        "x": 0.1077,
+        "y": 0.2006,
+        "z": -0.0509,
+        "row": 0,
+        "col": 2
+      },
+      {
+        "index": 4,
+        "name": "harvest_4",
+        "x": 0.0511,
+        "y": 0.1659,
+        "z": -0.0509,
+        "row": 1,
+        "col": 0
+      },
+      {
+        "index": 5,
+        "name": "harvest_5",
+        "x": 0.0794,
+        "y": 0.1659,
+        "z": -0.0509,
+        "row": 1,
+        "col": 1
+      },
+      {
+        "index": 6,
+        "name": "harvest_6",
+        "x": 0.1077,
+        "y": 0.1659,
+        "z": -0.0509,
+        "row": 1,
+        "col": 2
+      },
+      {
+        "index": 7,
+        "name": "harvest_7",
+        "x": 0.0511,
+        "y": 0.1312,
+        "z": -0.0509,
+        "row": 2,
+        "col": 0
+      },
+      {
+        "index": 8,
+        "name": "harvest_8",
+        "x": 0.0794,
+        "y": 0.1312,
+        "z": -0.0509,
+        "row": 2,
+        "col": 1
+      },
+      {
+        "index": 9,
+        "name": "harvest_9",
+        "x": 0.1077,
+        "y": 0.1312,
+        "z": -0.0509,
+        "row": 2,
+        "col": 2
+      }
+    ],
+    "camera": {
+      "x": 0.23524761962890625,
+      "y": -0.002844233512878418,
+      "z": 0.0673179931640625
+    },
+    "defect_box": {
+      "x": 0.17821820068359376,
+      "y": 0.11377538299560547,
+      "z": 0.03355403900146484
+    },
+    "conveyor_start": {
+      "x": 0.10410877227783204,
+      "y": -0.1499163055419922,
+      "z": 0.018265777587890625
+    }
+  },
+  "implementation_notes": [
+    "jump move safe z is currently z=0",
+    "vision capture/result waits are temporarily replaced by 2-second waits",
+    "after moving Dobot hardware, recalibrate and replace old position constants with this file"
+  ]
+}
