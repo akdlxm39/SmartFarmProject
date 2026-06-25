@@ -387,10 +387,12 @@ class WebSocketResultBroadcaster:
 
     async def _handler(self, websocket, *_args) -> None:
         self.clients.add(websocket)
+        self._log_info(f"{websocket.remote_address} connected.")
         try:
             await websocket.wait_closed()
         finally:
             self.clients.discard(websocket)
+            self._log_error("websocket errer!!")
 
     async def _run_server(self) -> None:
         try:
@@ -480,7 +482,7 @@ class ConveyorTopviewColorDetector(Node):
         self.declare_parameter("disappear_stable_frames", 10)
         self.declare_parameter("websocket_enabled", True)
         self.declare_parameter("websocket_host", "0.0.0.0")
-        self.declare_parameter("websocket_port", 8765)
+        self.declare_parameter("websocket_port", 28765)
         self.declare_parameter("websocket_include_image", True)
         self.declare_parameter("websocket_jpeg_quality", 80)
         self.declare_parameter("modbus_enabled", False)

@@ -1,0 +1,19 @@
+# TurtleBot delivery waypoints for SmartFarmProject.
+# Fill x/y/yaw after real map coordinate confirmation in RViz.
+frame_id: map
+waypoints:
+  home:
+    x: 0.0
+    y: 0.0
+    yaw: 0.0
+    note: "초기 대기 위치 - 실측 후 갱신"
+  pickup_wait:
+    x: 0.0
+    y: 0.0
+    yaw: 0.0
+    note: "컨베이어 끝/상차 대기 위치 - 실측 후 갱신"
+  delivery_goal:
+    x: 0.0
+    y: 0.0
+    yaw: 0.0
+    note: "배송 목표 위치 - 실측 후 갱신"

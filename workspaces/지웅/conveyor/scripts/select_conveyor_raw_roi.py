@@ -140,7 +140,7 @@ def save_raw_roi_outputs(
             "websocket": {
                 "enabled": True,
                 "host": "0.0.0.0",
-                "port": 8765,
+                "port": 28765,
                 "payload": "JSON with detections and image_jpeg_base64",
             },
             "modbus": {"mode": "tcp", "library": "pymodbus==3.13.1"},

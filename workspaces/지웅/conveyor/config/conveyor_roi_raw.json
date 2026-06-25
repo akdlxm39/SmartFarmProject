@@ -61,7 +61,7 @@
     "websocket": {
       "enabled": true,
       "host": "0.0.0.0",
-      "port": 8765,
+      "port": 28765,
       "payload": "JSON with detections and image_jpeg_base64"
     },
     "modbus": {

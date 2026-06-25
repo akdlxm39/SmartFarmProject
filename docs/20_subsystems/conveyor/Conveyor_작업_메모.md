@@ -550,7 +550,7 @@ wrote status=1 error=0
 - 사용자가 D435i ROS 코드에서 top-view 보정을 생략하고 원본 RGB frame에서 바로 ROI를 적용하며, 결과 화면을 WebSocket server로 열어 다른 WebSocket client에 전송해야 한다고 요청했다.
 - `conveyor_vision_test/topview_color_detector.py`에 `perspective_mode` parameter를 추가했다. 기본값은 `raw`이며, 기존 top-view 방식은 `perspective_mode:=topview` fallback으로 유지한다.
 - raw ROI config `workspaces/지웅/conveyor/config/conveyor_roi_raw.json`을 추가했다. 현재 raw ROI는 기존 top-view source quad를 원본 frame ROI로 사용하며, 필요 시 실제 화면에서 더 타이트하게 재보정한다.
-- WebSocket server 기능을 추가했다. 기본 `websocket_enabled:=true`, `websocket_host:=0.0.0.0`, `websocket_port:=8765`; client는 `ws://<PC_IP>:8765`로 접속해 JSON payload를 받는다. payload는 `type=conveyor_roi_result`, `frame_space`, `detections`, `modbus_state`, `image_jpeg_base64`를 포함한다.
+- WebSocket server 기능을 추가했다. 기본 `websocket_enabled:=true`, `websocket_host:=0.0.0.0`, `websocket_port:=28765`; client는 `ws://<PC_IP>:28765`로 접속해 JSON payload를 받는다. payload는 `type=conveyor_roi_result`, `frame_space`, `detections`, `modbus_state`, `image_jpeg_base64`를 포함한다.
 - ROS executable alias `raw_roi_color_detector`를 추가했고 기존 `topview_color_detector`도 동일 entrypoint로 유지한다.
 - 검증: ROS 환경에서 unit tests `15 passed`, `colcon build --packages-select conveyor_vision_test` 통과, `ros2 pkg executables conveyor_vision_test`에서 `raw_roi_color_detector` 확인, raw ROI smoke에서 `frame_space=raw`, shape `(720,1280,3)`, ROI `[[259,54],[983,54],[1208,600],[30,608]]` 확인.
 - 현재 환경에는 `python3-websockets`가 설치되어 있지 않으므로 실제 WebSocket server 실행 전 `sudo apt install -y python3-websockets` 또는 해당 ROS Python 환경에 `websockets` 설치가 필요하다.

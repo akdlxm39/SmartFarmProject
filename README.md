@@ -152,6 +152,7 @@ docs/
 - `docs/00_project/프로젝트_개요_및_초기_정리.md`
 - `docs/10_architecture/시스템_데이터_흐름_초안.md`
 - `docs/10_architecture/아키텍처_보강_계획.md`
+- `docs/20_subsystems/turtlebot/TurtleBot_작업_메모.md`
 - `docs/30_plans/프로젝트_폴더_구조_정리_계획.md`
 - `docs/30_plans/ROS2_workspace_src_구조_전환_계획.md`
 - `docs/40_logs/진행_로그.md`
@@ -170,6 +171,10 @@ docs/
 
 ## 현재 결정 사항
 
+- 이 쓰레드 집중 범위: TurtleBot SLAM/Navigation/배송 흐름/Modbus 상태 연동
+- TurtleBot MVP: 먼저 수동 주행 → SLAM/mapping → Nav2 단일 목표 이동 → 배송 상태/heartbeat 연동 순서로 검증
+- TurtleBot 배송 호출/압력센서/상차 기구는 SLAM/Navigation 기본 성공 후 단계적으로 붙인다.
+- TurtleBot Modbus block: `40051~40070` 예약, 상태/heartbeat부터 먼저 write하고 command/ack는 후속 단계로 확장
 - 1번 카메라: 메인 판정 카메라
 - 2번 카메라: 컨베이어 흐름 확인용 RGB-D/D435i 보조 비전 카메라
 - 컨베이어 MVP: RGB 프레임 + raw ROI 기본, top-view는 fallback
