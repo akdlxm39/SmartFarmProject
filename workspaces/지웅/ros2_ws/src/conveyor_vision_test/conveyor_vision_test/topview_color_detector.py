@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import json
 import os
+import threading
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -28,7 +32,7 @@ from conveyor_vision_test.conveyor_modbus import (
 
 DEFAULT_CONFIG_PATH = (
     "/home/ssafy/work/SmartFarmProject/workspaces/지웅/conveyor/"
-    "config/conveyor_roi_topview.json"
+    "config/conveyor_roi_raw.json"
 )
 
 ColorDetection = Dict[str, object]
@@ -46,20 +50,49 @@ def _as_int_points(points: Sequence[Sequence[float]]) -> np.ndarray:
     return np.array([[int(round(x)), int(round(y))] for x, y in points], dtype=np.int32)
 
 
-def polygon_from_config(config: Dict[str, object]) -> Optional[np.ndarray]:
-    """Return conveyor ROI polygon in top-view coordinates."""
-    conveyor_roi = config.get("conveyor_roi", {})
-    if not isinstance(conveyor_roi, dict):
+def _roi_polygon_from_dict(roi: object) -> Optional[np.ndarray]:
+    if not isinstance(roi, dict):
         return None
 
-    quad = conveyor_roi.get("quad_xy_tl_tr_br_bl")
+    quad = roi.get("quad_xy_tl_tr_br_bl")
     if isinstance(quad, list) and len(quad) >= 3:
         return _as_int_points(quad)
 
-    xyxy = conveyor_roi.get("xyxy")
+    xyxy = roi.get("xyxy")
     if isinstance(xyxy, list) and len(xyxy) == 4:
         x1, y1, x2, y2 = [int(round(v)) for v in xyxy]
         return np.array([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], dtype=np.int32)
+
+    return None
+
+
+def polygon_from_config(config: Dict[str, object]) -> Optional[np.ndarray]:
+    """Return conveyor ROI polygon in top-view coordinates."""
+    return _roi_polygon_from_dict(config.get("conveyor_roi", {}))
+
+
+def raw_polygon_from_config(config: Dict[str, object]) -> Optional[np.ndarray]:
+    """Return a raw-frame ROI polygon without applying top-view warping.
+
+    Preferred config key is ``raw_roi``. For backward compatibility during the
+    transition away from top-view processing, this also accepts
+    ``conveyor_roi`` when it explicitly declares ``coordinate_space: raw`` and
+    finally falls back to the raw belt quadrilateral used as the old top-view
+    source polygon.
+    """
+    raw_roi = _roi_polygon_from_dict(config.get("raw_roi", {}))
+    if raw_roi is not None:
+        return raw_roi
+
+    conveyor_roi = config.get("conveyor_roi", {})
+    if isinstance(conveyor_roi, dict) and str(conveyor_roi.get("coordinate_space", "")).lower() == "raw":
+        return _roi_polygon_from_dict(conveyor_roi)
+
+    topview = config.get("topview", {})
+    if isinstance(topview, dict):
+        source_quad = topview.get("source_quad_raw_xy_tl_tr_br_bl")
+        if isinstance(source_quad, list) and len(source_quad) >= 3:
+            return _as_int_points(source_quad)
 
     return None
 
@@ -253,6 +286,181 @@ def draw_roi_and_detections(
     return annotated
 
 
+def process_frame_for_detection(
+    frame_bgr: np.ndarray,
+    config: Dict[str, object],
+    perspective_mode: str = "raw",
+) -> Tuple[np.ndarray, Optional[np.ndarray], str]:
+    """Return the image space used for detection, its ROI, and space name.
+
+    ``raw`` skips the previous perspective/top-view warp and applies ROI
+    directly to the D435i color frame. ``topview`` preserves the older behavior
+    for fallback testing.
+    """
+    mode = str(perspective_mode).strip().lower()
+    if mode in {"raw", "raw_roi", "none", "direct"}:
+        return frame_bgr, raw_polygon_from_config(config), "raw"
+    if mode in {"topview", "top_view", "warp"}:
+        topview_size = topview_size_from_config(config)
+        matrix = perspective_matrix_from_config(config)
+        topview = cv2.warpPerspective(frame_bgr, matrix, topview_size)
+        return topview, polygon_from_config(config), "topview"
+    raise ValueError("perspective_mode must be 'raw' or 'topview'")
+
+
+def _serializable_detections(detections: Sequence[ColorDetection]) -> List[Dict[str, object]]:
+    serializable: List[Dict[str, object]] = []
+    for detection in detections:
+        bbox = detection.get("bbox_xyxy", [])
+        area_value = detection.get("area", 0.0)
+        serializable.append(
+            {
+                "color": str(detection.get("color", "unknown")),
+                "bbox_xyxy": [int(v) for v in bbox],  # type: ignore[arg-type]
+                "area": float(area_value if isinstance(area_value, (int, float, str)) else 0.0),
+            }
+        )
+    return serializable
+
+
+def build_websocket_payload(
+    detections: Sequence[ColorDetection],
+    annotated_bgr: np.ndarray,
+    frame_space: str,
+    include_image: bool = True,
+    jpeg_quality: int = 80,
+    modbus_state: Optional[ConveyorRegisterState] = None,
+) -> Dict[str, object]:
+    """Build a JSON-serializable WebSocket result payload.
+
+    The result frame is encoded as base64 JPEG so generic WebSocket clients can
+    render it without ROS message support.
+    """
+    payload: Dict[str, object] = {
+        "type": "conveyor_roi_result",
+        "timestamp_unix": time.time(),
+        "frame_space": frame_space,
+        "frame_width": int(annotated_bgr.shape[1]),
+        "frame_height": int(annotated_bgr.shape[0]),
+        "detections": _serializable_detections(detections),
+    }
+    if modbus_state is not None:
+        payload["modbus_state"] = {
+            "conveyor_command": int(modbus_state.conveyor_command),
+            "conveyor_speed_cmd": int(modbus_state.conveyor_speed_cmd),
+            "cube_detected": int(modbus_state.cube_detected),
+            "cube_color": int(modbus_state.cube_color),
+            "last_vision_event": int(modbus_state.last_vision_event),
+        }
+    if include_image:
+        quality = max(1, min(100, int(jpeg_quality)))
+        ok, encoded = cv2.imencode(".jpg", annotated_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+        if not ok:
+            raise RuntimeError("failed to encode annotated frame as JPEG")
+        payload["image_encoding"] = "jpg_base64"
+        payload["image_jpeg_base64"] = base64.b64encode(encoded.tobytes()).decode("ascii")
+    else:
+        payload["image_encoding"] = "none"
+    return payload
+
+
+class WebSocketResultBroadcaster:
+    """Small optional WebSocket server that broadcasts latest ROI result JSON."""
+
+    def __init__(self, host: str, port: int, logger=None) -> None:
+        self.host = host
+        self.port = int(port)
+        self.logger = logger
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self.thread: Optional[threading.Thread] = None
+        self.server = None
+        self.clients = set()
+        self.started = False
+
+    def _log_info(self, message: str) -> None:
+        if self.logger is not None:
+            self.logger.info(message)
+
+    def _log_error(self, message: str) -> None:
+        if self.logger is not None:
+            self.logger.error(message)
+
+    async def _handler(self, websocket, *_args) -> None:
+        self.clients.add(websocket)
+        try:
+            await websocket.wait_closed()
+        finally:
+            self.clients.discard(websocket)
+
+    async def _run_server(self) -> None:
+        try:
+            import websockets  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise RuntimeError("Python package 'websockets' is required for websocket_enabled:=true") from exc
+        self.server = await websockets.serve(self._handler, self.host, self.port)
+        self.started = True
+        self._log_info(f"WebSocket result server listening on ws://{self.host}:{self.port}")
+
+    def start(self) -> None:
+        if self.thread is not None:
+            return
+        self.loop = asyncio.new_event_loop()
+
+        def runner() -> None:
+            assert self.loop is not None
+            asyncio.set_event_loop(self.loop)
+            try:
+                self.loop.run_until_complete(self._run_server())
+                self.loop.run_forever()
+            except Exception as exc:  # pragma: no cover - runtime environment dependent
+                self._log_error(f"WebSocket result server failed: {exc}")
+
+        self.thread = threading.Thread(target=runner, name="conveyor-websocket", daemon=True)
+        self.thread.start()
+
+    async def _broadcast_json(self, payload: Dict[str, object]) -> None:
+        if not self.clients:
+            return
+        message = json.dumps(payload, ensure_ascii=False)
+        stale = []
+        for client in list(self.clients):
+            try:
+                await client.send(message)
+            except Exception:
+                stale.append(client)
+        for client in stale:
+            self.clients.discard(client)
+
+    def broadcast(self, payload: Dict[str, object]) -> None:
+        if self.loop is None or not self.started:
+            return
+        asyncio.run_coroutine_threadsafe(self._broadcast_json(payload), self.loop)
+
+    def stop(self) -> None:
+        if self.loop is None:
+            return
+
+        async def shutdown() -> None:
+            if self.server is not None:
+                self.server.close()
+                await self.server.wait_closed()
+            for client in list(self.clients):
+                await client.close()
+            self.clients.clear()
+
+        future = asyncio.run_coroutine_threadsafe(shutdown(), self.loop)
+        try:
+            future.result(timeout=1.0)
+        except Exception:
+            pass
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        if self.thread is not None:
+            self.thread.join(timeout=1.0)
+        self.loop = None
+        self.thread = None
+        self.started = False
+
+
 class ConveyorTopviewColorDetector(Node):
     """Subscribe to D435i color frames, warp top-view, and display ROI detections."""
 
@@ -261,7 +469,8 @@ class ConveyorTopviewColorDetector(Node):
 
         self.declare_parameter("image_topic", "/camera/camera/color/image_raw")
         self.declare_parameter("config_path", DEFAULT_CONFIG_PATH)
-        self.declare_parameter("annotated_topic", "/conveyor/topview_annotated")
+        self.declare_parameter("annotated_topic", "/conveyor/roi_annotated")
+        self.declare_parameter("perspective_mode", "raw")
         self.declare_parameter("show_windows", True)
         self.declare_parameter("publish_annotated", True)
         self.declare_parameter("display_scale", 1.0)
@@ -269,6 +478,11 @@ class ConveyorTopviewColorDetector(Node):
         self.declare_parameter("morph_kernel_size", 5)
         self.declare_parameter("allow_dimension_mismatch", False)
         self.declare_parameter("disappear_stable_frames", 10)
+        self.declare_parameter("websocket_enabled", True)
+        self.declare_parameter("websocket_host", "0.0.0.0")
+        self.declare_parameter("websocket_port", 8765)
+        self.declare_parameter("websocket_include_image", True)
+        self.declare_parameter("websocket_jpeg_quality", 80)
         self.declare_parameter("modbus_enabled", False)
         self.declare_parameter("modbus_host", "192.168.110.109")
         self.declare_parameter("modbus_port", 50200)
@@ -284,6 +498,7 @@ class ConveyorTopviewColorDetector(Node):
         self.image_topic = str(self.get_parameter("image_topic").value)
         self.config_path = str(self.get_parameter("config_path").value)
         self.annotated_topic = str(self.get_parameter("annotated_topic").value)
+        self.perspective_mode = str(self.get_parameter("perspective_mode").value).strip().lower()
         self.show_windows = bool(self.get_parameter("show_windows").value)
         self.publish_annotated = bool(self.get_parameter("publish_annotated").value)
         self.display_scale = float(self.get_parameter("display_scale").value)
@@ -293,6 +508,11 @@ class ConveyorTopviewColorDetector(Node):
             self.get_parameter("allow_dimension_mismatch").value
         )
         self.disappear_stable_frames = int(self.get_parameter("disappear_stable_frames").value)
+        self.websocket_enabled = bool(self.get_parameter("websocket_enabled").value)
+        self.websocket_host = str(self.get_parameter("websocket_host").value)
+        self.websocket_port = int(self.get_parameter("websocket_port").value)
+        self.websocket_include_image = bool(self.get_parameter("websocket_include_image").value)
+        self.websocket_jpeg_quality = int(self.get_parameter("websocket_jpeg_quality").value)
         self.modbus_enabled = bool(self.get_parameter("modbus_enabled").value)
         self.modbus_host = str(self.get_parameter("modbus_host").value)
         self.modbus_port = int(self.get_parameter("modbus_port").value)
@@ -319,9 +539,14 @@ class ConveyorTopviewColorDetector(Node):
 
         self.config = load_roi_config(self.config_path)
         self.raw_size = raw_size_from_config(self.config)
-        self.topview_size = topview_size_from_config(self.config)
-        self.matrix = perspective_matrix_from_config(self.config)
-        self.roi_polygon = polygon_from_config(self.config)
+        if self.perspective_mode in {"topview", "top_view", "warp"}:
+            self.topview_size = topview_size_from_config(self.config)
+            self.roi_polygon = polygon_from_config(self.config)
+            self.output_space = "topview"
+        else:
+            self.topview_size = None
+            self.roi_polygon = raw_polygon_from_config(self.config)
+            self.output_space = "raw"
         self.dimension_warning_logged = False
         self.last_detection_signature: Optional[Tuple[Tuple[str, Tuple[int, int, int, int]], ...]] = None
         self.vision_state_machine = ConveyorVisionStateMachine(
@@ -341,6 +566,15 @@ class ConveyorTopviewColorDetector(Node):
                 dry_run=self.modbus_dry_run,
             )
 
+        self.websocket_broadcaster: Optional[WebSocketResultBroadcaster] = None
+        if self.websocket_enabled:
+            self.websocket_broadcaster = WebSocketResultBroadcaster(
+                host=self.websocket_host,
+                port=self.websocket_port,
+                logger=self.get_logger(),
+            )
+            self.websocket_broadcaster.start()
+
         self.publisher = None
         if self.publish_annotated:
             self.publisher = self.create_publisher(Image, self.annotated_topic, 10)
@@ -350,10 +584,20 @@ class ConveyorTopviewColorDetector(Node):
         self.get_logger().info(f"Subscribed image_topic={self.image_topic}")
         self.get_logger().info(f"Loaded ROI config={self.config_path}")
         self.get_logger().info(
-            f"Top-view size={self.topview_size}, raw calibration size={self.raw_size}"
+            f"Detection perspective_mode={self.perspective_mode}, output_space={self.output_space}, "
+            f"raw calibration size={self.raw_size}, topview size={self.topview_size}"
         )
         self.get_logger().info(
             "OpenCV window: " + ("enabled" if self.show_windows else "disabled")
+        )
+        self.get_logger().info(
+            "WebSocket: "
+            + (
+                f"enabled ws://{self.websocket_host}:{self.websocket_port} "
+                f"include_image={self.websocket_include_image} jpeg_quality={self.websocket_jpeg_quality}"
+                if self.websocket_enabled
+                else "disabled"
+            )
         )
         self.get_logger().info(
             "Modbus: "
@@ -416,16 +660,25 @@ class ConveyorTopviewColorDetector(Node):
             self.get_logger().error(str(exc))
             return
 
-        topview = cv2.warpPerspective(frame_bgr, self.matrix, self.topview_size)
+        try:
+            detection_frame, roi_polygon, frame_space = process_frame_for_detection(
+                frame_bgr,
+                self.config,
+                perspective_mode=self.perspective_mode,
+            )
+        except ValueError as exc:
+            self.get_logger().error(str(exc))
+            return
+
         detections = detect_red_green_objects(
-            topview,
-            self.roi_polygon,
+            detection_frame,
+            roi_polygon,
             min_area=self.min_area,
             morph_kernel_size=self.morph_kernel_size,
         )
         modbus_state = self.vision_state_machine.update(detections)
         self._write_modbus_state(modbus_state)
-        annotated = draw_roi_and_detections(topview, self.roi_polygon, detections)
+        annotated = draw_roi_and_detections(detection_frame, roi_polygon, detections)
 
         signature = tuple(
             (str(item["color"]), tuple(item["bbox_xyxy"])) for item in detections
@@ -441,7 +694,18 @@ class ConveyorTopviewColorDetector(Node):
             )
 
         if self.publisher is not None:
-            self.publisher.publish(bgr_to_ros_image(annotated, msg))
+            self.publisher.publish(bgr_to_ros_image(annotated, msg, frame_suffix=f"_{frame_space}_roi"))
+
+        if self.websocket_broadcaster is not None:
+            payload = build_websocket_payload(
+                detections=detections,
+                annotated_bgr=annotated,
+                frame_space=frame_space,
+                include_image=self.websocket_include_image,
+                jpeg_quality=self.websocket_jpeg_quality,
+                modbus_state=modbus_state,
+            )
+            self.websocket_broadcaster.broadcast(payload)
 
         if self.show_windows:
             shown = annotated
@@ -453,7 +717,7 @@ class ConveyorTopviewColorDetector(Node):
                     fy=self.display_scale,
                     interpolation=cv2.INTER_AREA,
                 )
-            cv2.imshow("conveyor_topview_roi_detector", shown)
+            cv2.imshow("conveyor_raw_roi_detector", shown)
             key = cv2.waitKey(1) & 0xFF
             if key in {ord("q"), 27}:
                 self.get_logger().info("Quit key received; shutting down.")
@@ -461,6 +725,8 @@ class ConveyorTopviewColorDetector(Node):
 
     def destroy_node(self) -> bool:
         self._send_shutdown_command()
+        if self.websocket_broadcaster is not None:
+            self.websocket_broadcaster.stop()
         if self.modbus_client is not None:
             self.modbus_client.close()
         if self.show_windows:

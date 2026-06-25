@@ -153,3 +153,24 @@ command=0(stop) speed=0 target=192.168.110.109:50200 ok=True
 ```
 
 현재 Hermes background process에서 server가 실행 중이다: `proc_97a93c7ffdc8`.
+
+## 12. Register map 확장 계획 초안
+- 상세 초안 문서: `docs/20_subsystems/modbus/Modbus_Register_Map_확장_계획.md`
+- 목적: 기존 Conveyor `40021~40030`을 유지하면서 Farm/System, Dobot, TurtleBot 상태와 Web 상위 명령을 같은 Modbus shared register layer에서 관리한다.
+- Web에서 직접 내릴 명령은 우선 `수확시작`, `전체 시스템 일시 정지` 두 개로 제한한다.
+- 중복 실행 방지를 위해 상위 명령은 `system_command + system_command_seq + system_command_ack_seq` 패턴을 권장한다.
+- 구현 확정 전 초안이므로, 승인 후 `workspaces/지웅/modbus/register_map.py`에 반영한다.
+
+## 13. Register map 코드 반영
+- `Modbus_Register_Map_확장_계획.md`의 Farm/System, Dobot, TurtleBot register map을 `workspaces/지웅/modbus/register_map.py`에 반영했다.
+- Web 상위 명령은 `system_command=0 none, 1 harvest_start, 2 pause_all, 3 resume_all`로 정리했다.
+- command 중복 실행 방지를 위해 system/Dobot/TurtleBot command block에 `*_command_seq`, `*_command_ack_seq` 패턴을 반영했다.
+- 누적 수량은 16-bit holding register 한계를 고려해 `*_lo`, `*_hi` 32-bit pair로 저장한다.
+- 다른 세션과 충돌을 피하기 위해 기존 50200 server process는 재시작/종료하지 않고, 코드/문서만 반영했다.
+
+## 14. 2026-06-25 Conveyor clients pymodbus 3.13.1 통일
+- 기준은 `pymodbus==3.13.1`로 통일한다.
+- Modbus server workspace `.venv`와 Pi controller `requirements.txt`는 이미 3.13.1 기준이다.
+- ROS conveyor package도 `setup.py`/`requirements.txt`에 `pymodbus==3.13.1`을 pin하고, `conveyor_modbus.py`를 `AsyncModbusTcpClient` + `device_id=` 방식으로 수정했다.
+- PC `/usr/bin/python3.10` 환경에서 `pymodbus.__version__ == 3.13.1` 확인.
+- 임시 local server `127.0.0.1:55020`에서 ROS manual command가 `40021/40022 == [1, 77]`을 쓰는 것을 확인했다.

@@ -76,20 +76,29 @@ BUTTON2=24 # restart / emergency latch clear
 
 ## Install on Raspberry Pi
 
-```bash
-cd /home/ssafy/SmartFarmProject/workspaces/지웅/conveyor/pi_controller
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-If `gpiod` is missing on Raspbian, install the system package:
+`conveyor_motor.py` uses the libgpiod v1 Python API (`gpiod.Chip(...).get_line`, `LINE_REQ_DIR_OUT`). On Raspberry Pi OS/Ubuntu, install the OS GPIO binding first, then create the venv with system packages visible.
 
 ```bash
 sudo apt update
-sudo apt install -y python3-libgpiod gpiod
+sudo apt install -y gpiod python3-libgpiod
+
+cd /home/ssafy/SmartFarmProject/workspaces/지웅/conveyor/pi_controller
+rm -rf .venv
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+
+python - <<'PY'
+import gpiod, pymodbus, sys
+print(sys.executable)
+print('gpiod:', gpiod.__file__)
+print('pymodbus:', pymodbus.__version__)
+print('has get_line:', hasattr(gpiod.Chip('gpiochip0'), 'get_line'))
+PY
 ```
+
+Do **not** blindly install the newest PyPI `gpiod` package if the import works from `python3-libgpiod`; newer libgpiod v2-style bindings may not expose the v1 `get_line()` API used by this controller.
 
 ## Dry-run motor test
 
@@ -112,6 +121,50 @@ Only run this when the conveyor area is safe:
 ```bash
 ./run_pi_controller.sh
 ```
+
+The startup log should now include the GPIO mapping, for example:
+
+```text
+GPIO setup chip=gpiochip0 dir=17 step=27 enable=22 enable_active_low=True
+motor step loop started direction=clockwise target_delay=...
+```
+
+If the Modbus status becomes `running` but the belt does not move, first test the Pi GPIO layer:
+
+```bash
+gpioinfo | grep -E 'GPIO17|GPIO22|GPIO27|conveyor'
+./run_pi_controller.sh --gpio-chip gpiochip4   # Raspberry Pi 5 alternate chip test
+```
+
+If the reference direct-pulse script also does not move the motor, treat it as a driver power / wiring / enable-polarity / GPIO chip issue rather than a Modbus issue.
+
+## Direct GPIO pulse diagnostic
+
+Use this after stopping all running conveyor controller processes. It bypasses Modbus and drives STEP/DIR/ENABLE directly.
+
+```bash
+# 1) Stop old controller processes first, otherwise GPIO lines remain [used].
+pkill -f conveyor_modbus_client_controller.py || true
+pkill -f gpio_pulse_diagnostic.py || true
+
+# 2) Confirm the lines are free. If they are still [used], another process is holding them.
+gpioinfo | grep -E 'GPIO17|GPIO22|GPIO27|conveyor|diag'
+
+# 3) Slow safe pulse test on the default chip.
+source .venv/bin/activate
+python gpio_pulse_diagnostic.py --gpio-chip gpiochip0 --pulse-delay-sec 0.001 --duration-sec 3
+
+# 4) If the motor does not move, test opposite enable polarity.
+python gpio_pulse_diagnostic.py --gpio-chip gpiochip0 --no-enable-active-low --pulse-delay-sec 0.001 --duration-sec 3
+
+# 5) If Pi 5 chip mapping is still suspected, repeat on gpiochip4.
+python gpio_pulse_diagnostic.py --gpio-chip gpiochip4 --pulse-delay-sec 0.001 --duration-sec 3
+```
+
+Interpretation:
+- Diagnostic moves motor: controller/Modbus parameters can be adjusted to match the working chip/polarity/timing.
+- Diagnostic does not move motor but GPIO lines are `[used]`: software is toggling GPIO, so inspect driver power, ENA wiring/polarity, STEP/DIR wiring, common ground, and motor driver DIP/current settings.
+- `gpioinfo` shows duplicate GPIO17/22/27 entries only because multiple chips expose similarly named lines; use `gpioinfo gpiochip0` and `gpioinfo gpiochip4` separately to distinguish them.
 
 ## Manual command from PC
 

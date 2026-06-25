@@ -49,6 +49,20 @@ def test_run_commands_start_motor_and_status_running():
     assert state.status == STATUS_RUNNING
 
 
+def test_repeated_run_command_restarts_motor_if_loop_is_no_longer_running():
+    motor = FakeMotor()
+    controller = ConveyorController(motor=motor)
+
+    controller.apply_modbus_command(COMMAND_RUN_CLOCKWISE, speed_cmd=80)
+    motor.running = False
+
+    state = controller.apply_modbus_command(COMMAND_RUN_CLOCKWISE, speed_cmd=80)
+
+    assert motor.calls == [("cw", 80), ("cw", 80)]
+    assert state.status == STATUS_RUNNING
+    assert state.error_code == ERROR_NONE
+
+
 def test_stop_and_reset_stop_motor_and_clear_error_when_not_latched():
     motor = FakeMotor()
     controller = ConveyorController(motor=motor)

@@ -87,12 +87,12 @@ class ConveyorController:
             return self._set_state(STATUS_IDLE, ERROR_NONE)
 
         if command_value == COMMAND_RUN_CLOCKWISE:
-            if changed:
+            if changed or not bool(getattr(self.motor, "running", False)):
                 self.motor.start_clockwise(speed_cmd)
             return self._set_state(STATUS_RUNNING, ERROR_NONE)
 
         if command_value == COMMAND_RUN_COUNTER_CLOCKWISE:
-            if changed:
+            if changed or not bool(getattr(self.motor, "running", False)):
                 self.motor.start_counter_clockwise(speed_cmd)
             return self._set_state(STATUS_RUNNING, ERROR_NONE)
 

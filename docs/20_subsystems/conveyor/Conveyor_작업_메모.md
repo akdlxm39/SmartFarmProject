@@ -437,3 +437,137 @@ colcon test-result --verbose
 - Raspberry Pi 5(`ssafy@192.168.110.139`)는 server가 아니라 client이며, 실제 GPIO motor controller와 `40023/40024` 상태 write를 담당한다.
 - PC/ROS2 vision/manual client는 `40021/40022/40025~40027` 중심으로 write한다.
 - 자세한 server 관점 register map, ownership, 네트워크 검증 순서는 `docs/Conveyor_Modbus_Server_작업_메모.md`에 분리했다.
+
+## 18. 2026-06-24 컨베이어 미동작 1차 진단
+
+증상:
+- PC에서 RealSense `rs_launch.py`, Modbus server, `topview_color_detector` 실행.
+- Raspberry Pi에서 `run_pi_controller.sh` 실행.
+- Modbus server endpoint는 `192.168.110.109:50200`.
+- 큐브 감지/Modbus 구동 조건으로 보이는데 실제 컨베이어가 움직이지 않음.
+
+확인한 사실:
+- server process cwd: `/home/ssafy/work/SmartFarmProject/workspaces/지웅/modbus`.
+- server process는 `.venv`의 Python을 사용하며 `pymodbus==3.13.1`.
+- ROS detector process는 `/usr/bin/python3`를 사용하며 이 환경의 `pymodbus`는 `3.9.2`.
+- mock 검증에서 `pymodbus 3.13.1` server와 `pymodbus 3.9.2` client는 Modbus TCP protocol read/write가 정상 동작했다.
+- register snapshot에서 `40021 command=1`, `40022 speed=100`, `40023 status=1`, `40025 detected=1`, `40026 color=2`, `40027 event=1`이 확인되었다. 이는 PC vision write와 Pi status write가 register layer까지는 도달했을 가능성이 높다는 뜻이다.
+
+1차 판단:
+- 단순히 PC와 server의 `pymodbus` Python 패키지 버전이 다르기 때문에 컨베이어가 안 도는 가능성은 낮다. Modbus TCP는 wire protocol이고, 실제 read/write가 확인되었다.
+- 더 유력한 원인은 Raspberry Pi 실행 환경/옵션 또는 GPIO/motor layer다.
+
+다음 확인 순서:
+1. Pi에서 실제 실행 중인 Python이 `/home/ssafy/SmartFarmProject/workspaces/지웅/conveyor/pi_controller/.venv/bin/python`인지 확인.
+2. Pi에서 `pymodbus.__version__ == 3.13.1`인지 확인.
+3. `run_pi_controller.sh` 실행 시 `--dry-run-motor`가 붙어 있지 않은지 확인.
+4. Pi log에서 `connected to Modbus server`, `wrote status=1 error=0`, `motor step loop started`가 나오는지 확인.
+5. status가 running인데 모터가 안 움직이면 GPIO `DIR=17`, `STEP=27`, `ENABLE=22`, enable active-low, 모터 전원/드라이버 배선을 확인.
+
+## 19. 2026-06-25 컨베이어 미동작 2차 진단 및 pymodbus 3.13.1 async 전환
+
+추가 증상/로그:
+```text
+connected to Modbus server 192.168.110.109:50200
+wrote status=0 error=0
+motor step loop started direction=clockwise target_delay=0.0001000
+wrote status=1 error=0
+```
+
+판단:
+- `motor step loop started`가 이미 출력되었으므로, **Pi client가 command 변경을 수시로 확인하지 않아서 처음부터 모터가 안 돈다**는 설명은 현재 증상과 맞지 않는다.
+- Pi runner는 `poll_interval_sec=0.05` 기본값으로 `40021/40022`를 반복 read한다.
+- 다만 안전 보강으로 동일 run command가 유지되는 중 `motor.running == False`가 되면 같은 명령이라도 motor start를 재시도하도록 수정했다.
+- 현재 가장 유력한 원인은 Modbus layer보다 아래의 GPIO/motor layer다: 잘못된 `gpiochip`, BCM pin mapping 차이, enable polarity, STEP/DIR/ENABLE 배선, 모터 드라이버 전원/ENA 상태, 드라이버가 받아들이기 어려운 pulse 조건.
+
+코드 반영:
+- Pi controller: `ConveyorController.apply_modbus_command()`가 같은 run command라도 실제 motor loop 상태가 stopped이면 재시작한다.
+- Pi controller: GPIO setup 시 `chip/dir/step/enable/enable_active_low`를 log로 출력한다.
+- ROS conveyor Modbus client: sync `ModbusTcpClient` 사용을 제거하고 `pymodbus.client.AsyncModbusTcpClient` + `device_id=` 기준의 pymodbus 3.13.1 async 방식으로 전환했다. ROS callback/CLI 호환을 위해 public sync wrapper는 유지하고 내부 Modbus I/O만 async로 수행한다.
+- ROS package: `setup.py`와 `requirements.txt`에 `pymodbus==3.13.1`을 명시했다.
+- PC `/usr/bin/python3.10` 환경의 `pymodbus`를 3.13.1로 업그레이드했다.
+
+검증:
+- Pi controller unit tests: `14 passed`.
+- ROS conveyor vision tests: `12 passed`.
+- ROS package build: `colcon build --packages-select conveyor_vision_test` 통과.
+- PC ROS Python에서 `pymodbus.__version__ == 3.13.1` 확인.
+- 임시 local Modbus server `127.0.0.1:55020`에서 manual command smoke: `run_clockwise --speed 77` write 후 `40021/40022 == [1, 77]` 확인.
+
+다음 실제 장비 확인:
+1. Pi에서 `gpioinfo | grep -E 'GPIO17|GPIO22|GPIO27|conveyor'`로 실제 line consumer가 잡히는지 확인.
+2. Pi 5에서 `gpiochip0`로 안 움직이면 `./run_pi_controller.sh --gpio-chip gpiochip4`를 한 번 시도한다.
+3. 기존 reference `../ref/conveyor/conveyor_test.py` 또는 같은 STEP/DIR/ENABLE 직접 pulse 테스트도 안 움직이면 코드/Modbus가 아니라 배선·전원·드라이버·enable polarity 문제로 본다.
+4. 직접 pulse 테스트는 움직이고 `run_pi_controller.sh`만 안 움직이면 `gpiochip`, pin 번호, enable polarity, pulse timing을 controller 코드에서 장비값에 맞춰 조정한다.
+
+## 20. 2026-06-25 Pi gpiod 누락 대응
+- Pi에서 clean 재설치/테스트 중 `gpiod` Python binding이 없으면 `sudo apt install -y gpiod python3-libgpiod`를 먼저 설치한다.
+- 이 controller는 libgpiod v1 API(`Chip.get_line`, `LINE_REQ_DIR_OUT`)를 사용하므로, venv는 `python3 -m venv --system-site-packages .venv`로 다시 만드는 것을 기본 절차로 정했다.
+- `run_pi_controller.sh`에 real GPIO 실행 전 `gpiod` import와 `Chip.get_line` API 존재 여부를 검사하는 preflight를 추가했다. `--dry-run-motor`는 GPIO가 없어도 실행할 수 있게 preflight를 건너뛴다.
+
+## 21. 2026-06-25 GPIO line 점유 상태와 직접 pulse 진단
+- 사용자가 `gpioinfo | grep -E 'GPIO17|GPIO22|GPIO27|conveyor'` 결과를 공유했다. `GPIO17/22/27`이 `conveyor_dir/enable/step` consumer로 `[used]` 상태였으므로 Python `gpiod` import와 line request 자체는 성공한 상태로 판단한다.
+- grep 결과가 두 번 반복되는 것은 `gpioinfo`의 chip header가 grep에서 제거되어 여러 gpiochip의 같은 이름 line이 섞여 보였을 가능성이 있다. 이후에는 `gpioinfo gpiochip0`와 `gpioinfo gpiochip4`를 분리해서 확인한다.
+- line이 `[used]`인 동안은 기존 controller process가 GPIO를 잡고 있을 수 있으므로, 새 테스트 전 `pkill -f conveyor_modbus_client_controller.py`로 정리한다.
+- Modbus/controller를 완전히 우회하는 `gpio_pulse_diagnostic.py`를 추가했다. 기본 chip, 반대 enable polarity, gpiochip4를 각각 직접 pulse하여 GPIO software 문제와 motor driver/배선/전원 문제를 분리한다.
+
+## 22. 2026-06-25 직접 pulse 4조합 실패 판정
+- 사용자가 `gpiochip0/gpiochip4`와 enable active-low/active-high 4개 직접 pulse 조합을 모두 시도했지만 모터가 움직이지 않았다고 보고했다.
+- 이 결과는 Modbus/ROS/Pi controller 로직 원인 가능성을 매우 낮추고, 다음 원인 후보를 하드웨어 입력 계층으로 좁힌다: 드라이버 전원, ENA/PUL/DIR 배선, 공통 GND, Pi 3.3V 신호가 드라이버 optocoupler 입력 임계값을 넘지 못하는 문제, 모터 코일쌍/드라이버 DIP/current 설정.
+- 다음 진단을 위해 `gpio_level_diagnostic.py`를 추가했다. STEP/DIR/ENABLE을 0.5초 주기로 느리게 토글해서 멀티미터/LED/로직프로브로 Pi pin과 드라이버 단자에서 실제 전압 변화가 도달하는지 확인한다.
+- 판정 기준: Pi pin에서는 토글되지만 드라이버 단자에서 안 보이면 배선 문제, 드라이버 단자에서도 3.3V 토글은 보이나 모터가 안 움직이면 드라이버 입력 방식/전원/ENA/모터 결선 문제로 본다.
+
+## 23. 2026-06-25 실드 사용 확인 후 공통 actuator 계층으로 재분류
+- 사용자가 별도 모터 드라이버 배선이 아니라 이미 배선이 완성된 실드를 사용 중이며, 버튼 입력은 정상 작동하지만 스텝모터와 서보모터가 둘 다 작동하지 않는다고 보고했다.
+- 버튼이 정상이라는 사실은 `gpiochip`, Python `gpiod`, button pin 23/24, 기본 입력 경로가 살아 있다는 증거다. 반대로 서로 다른 actuator인 stepper(GPIO17/27/22)와 servo(GPIO18)가 동시에 실패하므로 원인은 개별 스텝 드라이버보다 실드의 actuator 공통 계층으로 본다.
+- 우선순위 후보: 실드 actuator 전원(VMOT/VIN/servo 5~6V rail) 미공급 또는 점퍼/스위치 OFF, 실드 OE/STBY/SLEEP/RESET enable 미처리, 실드가 raw GPIO가 아니라 I2C/PCA9685/TB6612 등 전용 인터페이스를 요구함, 실드 실제 pin mapping이 기존 reference의 `SERVO=18`, `DIR=17`, `STEP=27`, `ENABLE=22`와 다름.
+- `shield_actuator_diagnostic.py`를 추가했다. 버튼 read, servo 50Hz hold, stepper pulse를 한 스크립트에서 실행해 "입력 GPIO는 정상인데 actuator 출력만 실패" 상태를 재현/기록한다.
+
+## 24. 2026-06-25 Raspberry Pi OS 가능성 판정
+- 사용자가 Pi OS 정보를 공유했다: `Linux raspberrypi 6.12.75+rpt-rpi-2712`, Debian GNU/Linux bookworm, `aarch64`.
+- 현재 증거상 OS 자체가 1차 원인일 가능성은 낮다. 버튼이 정상 동작하고, 앞서 `gpiod` import/line request 및 `gpioinfo` consumer 표시가 확인되었기 때문에 kernel/libgpiod/GPIO 입력 경로는 살아 있다고 본다.
+- 단, OS/라이브러리 계층이 완전히 무관한 것은 아니다. Raspberry Pi 5/bookworm 계열에서는 legacy `RPi.GPIO`/`pigpio`/구버전 pin mapping 코드가 깨질 수 있고, `gpiochip0`/`gpiochip4` 번호 차이나 libgpiod v1/v2 API 차이는 주의해야 한다. 하지만 이번 코드는 libgpiod v1 API로 실행되고 버튼 입력이 확인되었으므로 actuator 미동작의 1순위는 OS가 아니라 실드 actuator 전원/enable/interface/pin mapping이다.
+
+## 25. 2026-06-25 SSAFY Smart Factory Shield 확인
+- 사용자가 실드 모델명이 공개 상용 모델이 아니라 커스텀 제작 `SSAFY Smart Factory Shield`라고 확인했다.
+- 따라서 인터넷/상용 모델명 기준 pin map 추정은 하지 않고, 보드 silkscreen/회로도/교육자료 또는 `gpiofind`/`gpioinfo`/`pinctrl` 기반 실측으로 pin mapping을 확정해야 한다.
+- 현재 reference code의 가정은 `SERVO=GPIO18`, `DIR=GPIO17`, `STEP=GPIO27`, `ENABLE=GPIO22`, `BUTTON1/2=GPIO23/24`이다. 버튼이 동작하더라도 actuator pin mapping까지 맞다는 뜻은 아니므로, SSAFY 실드 회로도에서 서보/스텝 모터 입력이 실제로 이 GPIO들에 연결되는지 확인한다.
+- 커스텀 실드에서는 버튼이 Pi GPIO에 직결되고, 스텝/서보는 별도 전원 rail, enable/standby, I2C PWM expander, motor driver input stage를 거칠 수 있으므로 `actuator 공통 계층` 우선순위를 유지한다.
+
+## 26. 2026-06-25 `run_pi_controller.sh` 실행 로그 기반 코드 계층 최종 판정
+- 사용자가 `./run_pi_controller.sh` 실행 로그를 공유했다. 로그상 `GPIO setup chip=gpiochip0 dir=17 step=27 enable=22 enable_active_low=True`, Modbus server 연결, `wrote status=0 error=0`, `motor step loop started direction=clockwise target_delay=0.0001000`, `wrote status=1 error=0`가 순서대로 확인되었다.
+- 사용자가 `GPIO27`이 `lo/hi`로 계속 번갈아 바뀐다고 확인했다. 이는 `ConveyorMotor._run_loop()`가 실제로 STEP pulse를 지속 출력하고 있음을 의미한다.
+- 공유된 Modbus response block은 `40021 command=1`, `40022 speed=100`, `40023 status=1`, `40024 error=0`, `40025 cube_detected=1`, `40026 cube_color=2`, `40027 last_vision_event=1`로 해석된다. 즉 controller는 run command를 읽고 running/no-error 상태를 쓰고 있다.
+- `request ask for transaction_id=64 but got id=63`는 Modbus TCP transaction mismatch/stale response 경고로 기록하되, STEP pulse가 계속 나오고 상태가 running/error=0이므로 현재 모터 미동작의 1차 원인으로 보지 않는다.
+- 로컬 검증: Pi controller tests `14 passed`. 현재 증거 기준 코드/Modbus/controller 계층은 정상 동작으로 판정하고, 남은 원인은 SSAFY Smart Factory Shield의 actuator 출력 계층 또는 실제 actuator pin mapping/전원/enable 쪽으로 좁힌다.
+
+## 27. 2026-06-25 전원선 문제 해결 및 컨베이어 구동 확인
+- 사용자가 최종 원인이 전원 문제였다고 확인했다. 다른 전원선을 사용하고 있어 actuator 전원이 정상 공급되지 않았고, 올바른 전원선으로 교체한 뒤 컨베이어가 정상 동작했다.
+- 최종 판정: Modbus server/client, Raspberry Pi controller, `gpiod`, GPIO27 STEP pulse, command/status register 처리 코드는 정상. 실제 장애 원인은 SSAFY Smart Factory Shield/actuator 전원 공급 경로였다.
+- 향후 같은 증상(`버튼은 동작하지만 스텝모터/서보모터가 모두 미동작`) 발생 시 우선 점검 순서: actuator 외부전원선/전원 rail/스위치/점퍼 → shield enable/standby → pin mapping → 코드/Modbus 순서로 본다.
+
+## 28. 2026-06-25 D435i ROS raw ROI + WebSocket 결과 전송 전환
+- 사용자가 D435i ROS 코드에서 top-view 보정을 생략하고 원본 RGB frame에서 바로 ROI를 적용하며, 결과 화면을 WebSocket server로 열어 다른 WebSocket client에 전송해야 한다고 요청했다.
+- `conveyor_vision_test/topview_color_detector.py`에 `perspective_mode` parameter를 추가했다. 기본값은 `raw`이며, 기존 top-view 방식은 `perspective_mode:=topview` fallback으로 유지한다.
+- raw ROI config `workspaces/지웅/conveyor/config/conveyor_roi_raw.json`을 추가했다. 현재 raw ROI는 기존 top-view source quad를 원본 frame ROI로 사용하며, 필요 시 실제 화면에서 더 타이트하게 재보정한다.
+- WebSocket server 기능을 추가했다. 기본 `websocket_enabled:=true`, `websocket_host:=0.0.0.0`, `websocket_port:=8765`; client는 `ws://<PC_IP>:8765`로 접속해 JSON payload를 받는다. payload는 `type=conveyor_roi_result`, `frame_space`, `detections`, `modbus_state`, `image_jpeg_base64`를 포함한다.
+- ROS executable alias `raw_roi_color_detector`를 추가했고 기존 `topview_color_detector`도 동일 entrypoint로 유지한다.
+- 검증: ROS 환경에서 unit tests `15 passed`, `colcon build --packages-select conveyor_vision_test` 통과, `ros2 pkg executables conveyor_vision_test`에서 `raw_roi_color_detector` 확인, raw ROI smoke에서 `frame_space=raw`, shape `(720,1280,3)`, ROI `[[259,54],[983,54],[1208,600],[30,608]]` 확인.
+- 현재 환경에는 `python3-websockets`가 설치되어 있지 않으므로 실제 WebSocket server 실행 전 `sudo apt install -y python3-websockets` 또는 해당 ROS Python 환경에 `websockets` 설치가 필요하다.
+
+## 29. 2026-06-25 raw view ROI 좌표 재캡처 도구 추가
+- raw-frame ROI를 실제 D435i 화면에서 다시 찍기 위해 `workspaces/지웅/conveyor/scripts/select_conveyor_raw_roi.py`를 추가했다.
+- 이 도구는 top-view/perspective 단계를 거치지 않고 `/camera/camera/color/image_raw`에서 프레임을 freeze한 뒤 raw view에서 ROI 4점을 직접 클릭한다.
+- 기본 출력은 `workspaces/지웅/conveyor/config/conveyor_roi_raw.json`이며, detector가 사용하는 `raw_roi.quad_xy_tl_tr_br_bl`과 `raw_roi.xyxy`를 갱신한다.
+- preview 이미지는 `workspaces/지웅/conveyor/config/previews/conveyor_roi_raw_raw_roi.png`와 `..._raw_frame.png`에 저장된다.
+- 실행 예:
+  ```bash
+  cd /home/ssafy/work/SmartFarmProject/workspaces/지웅/conveyor
+  source /opt/ros/humble/setup.bash
+  python3 scripts/select_conveyor_raw_roi.py \
+    --ros-topic /camera/camera/color/image_raw \
+    --output config/conveyor_roi_raw.json \
+    --display-scale 0.7
+  ```
+- 조작법: preview 창에서 SPACE로 현재 프레임 고정 → raw view에서 좌상단/우상단/우하단/좌하단 순서로 4점 클릭. 오른쪽 클릭 또는 `u`는 undo, `r`은 reset, `q`/ESC는 종료.
+- 검증: `/usr/bin/python3 -m py_compile` 통과, `--help` 출력 확인, sample image 기반 `--self-test --output /tmp/conveyor_roi_raw_self_test.json` 통과.

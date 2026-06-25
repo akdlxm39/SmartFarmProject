@@ -7,6 +7,8 @@ so 40021 is written as address 20 by default.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -343,7 +345,13 @@ class ConveyorVisionStateMachine:
 
 
 class ConveyorModbusTcpClient:
-    """Small wrapper around pymodbus for writing the conveyor register block."""
+    """Async pymodbus 3.13 TCP client wrapper for the conveyor register block.
+
+    Public methods stay synchronous for ROS callbacks/manual CLI compatibility,
+    but every Modbus operation is executed through ``AsyncModbusTcpClient`` and
+    the pymodbus 3.13 ``device_id=`` keyword. Async variants are exposed for
+    future non-blocking ROS workers.
+    """
 
     def __init__(
         self,
@@ -364,19 +372,42 @@ class ConveyorModbusTcpClient:
         self.client_factory = client_factory
         self.client: Optional[object] = None
 
+    @staticmethod
+    async def _maybe_await(value: object) -> object:
+        if inspect.isawaitable(value):
+            return await value
+        return value
+
+    @staticmethod
+    def _run(coro):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        raise RuntimeError(
+            "ConveyorModbusTcpClient sync method was called inside a running "
+            "asyncio loop; use the async_* method instead."
+        )
+
+    async def _close_after(self, coro):
+        try:
+            return await coro
+        finally:
+            await self.async_close()
+
     def _make_client(self) -> object:
         if self.client_factory is not None:
             return self.client_factory(host=self.host, port=self.port, timeout=self.timeout)
         try:
-            from pymodbus.client import ModbusTcpClient  # type: ignore
+            from pymodbus.client import AsyncModbusTcpClient  # type: ignore
         except ModuleNotFoundError as exc:
             raise RuntimeError(
-                "pymodbus is not installed for /usr/bin/python3. Install with: "
-                "/usr/bin/python3 -m pip install --user pymodbus==3.13.1"
+                "pymodbus is not installed for this Python. Install/pin with: "
+                "python -m pip install --upgrade pymodbus==3.13.1"
             ) from exc
-        return ModbusTcpClient(self.host, port=self.port, timeout=self.timeout)
+        return AsyncModbusTcpClient(self.host, port=self.port, timeout=self.timeout)
 
-    def connect(self) -> bool:
+    async def async_connect(self) -> bool:
         if self.dry_run:
             return True
         if self.client is None:
@@ -384,56 +415,45 @@ class ConveyorModbusTcpClient:
         connect = getattr(self.client, "connect", None)
         if connect is None:
             return True
-        return bool(connect())
+        return bool(await self._maybe_await(connect()))
 
-    def close(self) -> None:
+    def connect(self) -> bool:
+        return bool(self._run(self.async_connect()))
+
+    async def async_close(self) -> None:
         if self.client is None:
             return
         close = getattr(self.client, "close", None)
         if close is not None:
-            close()
+            await self._maybe_await(close())
         self.client = None
 
-    def _write_registers_call(self, start_address: int, values: Sequence[int]) -> object:
+    def close(self) -> None:
+        self._run(self.async_close())
+
+    async def _write_registers_call(self, start_address: int, values: Sequence[int]) -> object:
         if self.client is None:
             raise RuntimeError("Modbus client is not connected")
         write_registers = getattr(self.client, "write_registers")
-        for unit_kw in ("device_id", "slave", "unit"):
-            try:
-                return write_registers(
-                    start_address,
-                    list(values),
-                    **{unit_kw: self.unit_id},
-                )
-            except TypeError:
-                continue
-        return write_registers(start_address, list(values))
+        return await self._maybe_await(
+            write_registers(start_address, list(values), device_id=self.unit_id)
+        )
 
-    def _write_register_call(self, address: int, value: int) -> object:
+    async def _write_register_call(self, address: int, value: int) -> object:
         if self.client is None:
             raise RuntimeError("Modbus client is not connected")
         write_register = getattr(self.client, "write_register")
-        for unit_kw in ("device_id", "slave", "unit"):
-            try:
-                return write_register(address, int(value), **{unit_kw: self.unit_id})
-            except TypeError:
-                continue
-        return write_register(address, int(value))
+        return await self._maybe_await(
+            write_register(address, int(value), device_id=self.unit_id)
+        )
 
-    def _read_holding_registers_call(self, start_address: int, count: int) -> object:
+    async def _read_holding_registers_call(self, start_address: int, count: int) -> object:
         if self.client is None:
             raise RuntimeError("Modbus client is not connected")
         read_holding_registers = getattr(self.client, "read_holding_registers")
-        for unit_kw in ("device_id", "slave", "unit"):
-            try:
-                return read_holding_registers(
-                    start_address,
-                    count=count,
-                    **{unit_kw: self.unit_id},
-                )
-            except TypeError:
-                continue
-        return read_holding_registers(start_address, count=count)
+        return await self._maybe_await(
+            read_holding_registers(start_address, count=count, device_id=self.unit_id)
+        )
 
     @staticmethod
     def _is_error(result: object) -> bool:
@@ -442,41 +462,44 @@ class ConveyorModbusTcpClient:
             return False
         return bool(is_error())
 
-    def write_state(self, state: ConveyorRegisterState) -> bool:
+    async def async_write_state(self, state: ConveyorRegisterState) -> bool:
         """Legacy contiguous 40021~40027 writer.
 
         Kept for manual smoke tests. The ROS detector should prefer
-        `write_vision_command_state()` so it does not overwrite Pi-owned
+        `async_write_vision_command_state()` so it does not overwrite Pi-owned
         physical status/error registers.
         """
         values = state.as_register_values()
         if self.dry_run:
             return True
-        if not self.connect():
+        if not await self.async_connect():
             return False
 
         start_address = register_to_pymodbus_address(
             REGISTER_CONVEYOR_COMMAND,
             zero_based=self.zero_based_addresses,
         )
-        result = self._write_registers_call(start_address, values)
+        result = await self._write_registers_call(start_address, values)
         return not self._is_error(result)
 
-    def read_physical_state(self) -> Optional[ConveyorPhysicalState]:
+    def write_state(self, state: ConveyorRegisterState) -> bool:
+        return bool(self._run(self._close_after(self.async_write_state(state))))
+
+    async def async_read_physical_state(self) -> Optional[ConveyorPhysicalState]:
         """Read Pi-owned conveyor status/error from 40023~40024."""
         if self.dry_run:
             return ConveyorPhysicalState(
                 conveyor_status=STATUS_IDLE,
                 conveyor_error_code=ERROR_NONE,
             )
-        if not self.connect():
+        if not await self.async_connect():
             return None
 
         start_address = register_to_pymodbus_address(
             REGISTER_CONVEYOR_STATUS,
             zero_based=self.zero_based_addresses,
         )
-        result = self._read_holding_registers_call(start_address, count=2)
+        result = await self._read_holding_registers_call(start_address, count=2)
         if self._is_error(result):
             return None
         registers = getattr(result, "registers", None)
@@ -487,7 +510,10 @@ class ConveyorModbusTcpClient:
             conveyor_error_code=int(registers[1]),
         )
 
-    def write_command_plan(self, plan: ConveyorCommandWritePlan) -> bool:
+    def read_physical_state(self) -> Optional[ConveyorPhysicalState]:
+        return self._run(self._close_after(self.async_read_physical_state()))
+
+    async def async_write_command_plan(self, plan: ConveyorCommandWritePlan) -> bool:
         """Write allowed command/speed plus PC-owned vision registers.
 
         This deliberately does not write 40023/40024 because the Raspberry Pi
@@ -495,7 +521,7 @@ class ConveyorModbusTcpClient:
         """
         if self.dry_run:
             return True
-        if not self.connect():
+        if not await self.async_connect():
             return False
 
         ok = True
@@ -505,28 +531,34 @@ class ConveyorModbusTcpClient:
                 REGISTER_CONVEYOR_COMMAND,
                 zero_based=self.zero_based_addresses,
             )
-            command_result = self._write_registers_call(command_address, command_values)
+            command_result = await self._write_registers_call(command_address, command_values)
             ok = ok and not self._is_error(command_result)
 
         vision_address = register_to_pymodbus_address(
             REGISTER_CUBE_DETECTED,
             zero_based=self.zero_based_addresses,
         )
-        vision_result = self._write_registers_call(vision_address, plan.vision_values)
+        vision_result = await self._write_registers_call(vision_address, plan.vision_values)
         return ok and not self._is_error(vision_result)
 
-    def write_vision_command_state(self, desired_state: ConveyorRegisterState) -> bool:
-        """Read status, gate command, then write command/vision registers."""
-        physical_state = self.read_physical_state()
-        plan = build_command_write_plan(desired_state, physical_state)
-        return self.write_command_plan(plan)
+    def write_command_plan(self, plan: ConveyorCommandWritePlan) -> bool:
+        return bool(self._run(self._close_after(self.async_write_command_plan(plan))))
 
-    def write_command(self, command: object, speed_cmd: int = 0) -> bool:
+    async def async_write_vision_command_state(self, desired_state: ConveyorRegisterState) -> bool:
+        """Read status, gate command, then write command/vision registers."""
+        physical_state = await self.async_read_physical_state()
+        plan = build_command_write_plan(desired_state, physical_state)
+        return await self.async_write_command_plan(plan)
+
+    def write_vision_command_state(self, desired_state: ConveyorRegisterState) -> bool:
+        return bool(self._run(self._close_after(self.async_write_vision_command_state(desired_state))))
+
+    async def async_write_command(self, command: object, speed_cmd: int = 0) -> bool:
         """Write a manual command to 40021 and speed to 40022."""
         command_value = parse_conveyor_command(command)
         if self.dry_run:
             return True
-        if not self.connect():
+        if not await self.async_connect():
             return False
 
         command_address = register_to_pymodbus_address(
@@ -537,10 +569,12 @@ class ConveyorModbusTcpClient:
             REGISTER_CONVEYOR_SPEED_CMD,
             zero_based=self.zero_based_addresses,
         )
-        result_1 = self._write_register_call(command_address, command_value)
-        result_2 = self._write_register_call(speed_address, int(speed_cmd))
+        result_1 = await self._write_register_call(command_address, command_value)
+        result_2 = await self._write_register_call(speed_address, int(speed_cmd))
         return not self._is_error(result_1) and not self._is_error(result_2)
 
+    def write_command(self, command: object, speed_cmd: int = 0) -> bool:
+        return bool(self._run(self._close_after(self.async_write_command(command, speed_cmd=speed_cmd))))
 
 def format_register_state(state: ConveyorRegisterState) -> str:
     pairs = [

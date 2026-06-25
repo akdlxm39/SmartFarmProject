@@ -29,8 +29,11 @@ from conveyor_vision_test.conveyor_modbus import (
     register_to_pymodbus_address,
 )
 from conveyor_vision_test.topview_color_detector import (
+    build_websocket_payload,
     detect_red_green_objects,
     draw_roi_and_detections,
+    process_frame_for_detection,
+    raw_polygon_from_config,
 )
 
 
@@ -62,16 +65,57 @@ class FakePymodbusClient:
     def close(self):
         self.connected = False
 
-    def write_registers(self, address, values, slave=1):
-        self.write_registers_calls.append((address, list(values), slave))
+    def write_registers(self, address, values, device_id=1):
+        self.write_registers_calls.append((address, list(values), device_id))
         return FakeResult(False)
 
-    def write_register(self, address, value, slave=1):
-        self.write_register_calls.append((address, value, slave))
+    def write_register(self, address, value, device_id=1):
+        self.write_register_calls.append((address, value, device_id))
         return FakeResult(False)
 
-    def read_holding_registers(self, address, count=1, slave=1):
-        self.read_holding_registers_calls.append((address, count, slave))
+    def read_holding_registers(self, address, count=1, device_id=1):
+        self.read_holding_registers_calls.append((address, count, device_id))
+
+        class ReadResult:
+            def __init__(self, registers):
+                self.registers = registers
+
+            def isError(self):
+                return False
+
+        return ReadResult(self.register_values[address][:count])
+
+
+class AsyncFakePymodbusClient:
+    def __init__(self, host, port, timeout):
+        self.host = host
+        self.port = port
+        self.timeout = timeout
+        self.connected = False
+        self.write_registers_calls = []
+        self.write_register_calls = []
+        self.read_holding_registers_calls = []
+        self.register_values = {
+            22: [STATUS_IDLE, 0],
+        }
+
+    async def connect(self):
+        self.connected = True
+        return True
+
+    async def close(self):
+        self.connected = False
+
+    async def write_registers(self, address, values, device_id=1):
+        self.write_registers_calls.append((address, list(values), device_id))
+        return FakeResult(False)
+
+    async def write_register(self, address, value, device_id=1):
+        self.write_register_calls.append((address, value, device_id))
+        return FakeResult(False)
+
+    async def read_holding_registers(self, address, count=1, device_id=1):
+        self.read_holding_registers_calls.append((address, count, device_id))
 
         class ReadResult:
             def __init__(self, registers):
@@ -115,6 +159,64 @@ def test_draw_returns_annotated_image_with_same_shape():
 
     assert annotated.shape == image.shape
     assert np.any(annotated != image)
+
+
+def test_raw_roi_mode_uses_raw_frame_without_topview_warp():
+    image = np.zeros((240, 320, 3), dtype=np.uint8)
+    config = {
+        "raw_roi": {
+            "coordinate_space": "raw",
+            "xyxy": [20, 30, 200, 180],
+        },
+        "topview": {
+            "size_wh": [100, 80],
+            "perspective_matrix_raw_to_topview": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        },
+    }
+
+    processed, roi_polygon, frame_space = process_frame_for_detection(
+        image,
+        config,
+        perspective_mode="raw",
+    )
+
+    assert processed is image
+    assert frame_space == "raw"
+    assert roi_polygon.tolist() == [[20, 30], [200, 30], [200, 180], [20, 180]]
+
+
+def test_raw_roi_falls_back_to_source_quad_when_no_raw_roi_exists():
+    config = {
+        "topview": {
+            "source_quad_raw_xy_tl_tr_br_bl": [[1, 2], [30, 2], [30, 40], [1, 40]],
+        }
+    }
+
+    roi_polygon = raw_polygon_from_config(config)
+
+    assert roi_polygon.tolist() == [[1, 2], [30, 2], [30, 40], [1, 40]]
+
+
+def test_websocket_payload_contains_detections_and_jpeg_result_frame():
+    image = np.zeros((80, 120, 3), dtype=np.uint8)
+    cv2.rectangle(image, (10, 10), (40, 40), (0, 0, 255), -1)
+    detections = [{"color": "red", "bbox_xyxy": (10, 10, 41, 41), "area": 900.0}]
+
+    payload = build_websocket_payload(
+        detections=detections,
+        annotated_bgr=image,
+        frame_space="raw",
+        include_image=True,
+        jpeg_quality=80,
+    )
+
+    assert payload["type"] == "conveyor_roi_result"
+    assert payload["frame_space"] == "raw"
+    assert payload["image_encoding"] == "jpg_base64"
+    assert payload["image_jpeg_base64"]
+    assert payload["detections"] == [
+        {"color": "red", "bbox_xyxy": [10, 10, 41, 41], "area": 900.0}
+    ]
 
 
 def test_command_map_and_register_addressing():
@@ -190,6 +292,26 @@ def test_modbus_client_reads_pi_owned_status_and_error_registers():
         conveyor_error_code=0,
     )
     assert fake.read_holding_registers_calls == [(22, 2, 3)]
+
+
+def test_modbus_client_uses_pymodbus_313_async_client_shape():
+    fake_holder = {}
+
+    def factory(host, port, timeout):
+        fake_holder["client"] = AsyncFakePymodbusClient(host, port, timeout)
+        fake_holder["client"].register_values[22] = [STATUS_IDLE, 0]
+        return fake_holder["client"]
+
+    client = ConveyorModbusTcpClient(unit_id=7, client_factory=factory)
+    state = ConveyorVisionStateMachine(speed_cmd=55).update([{"color": "green"}])
+
+    assert client.write_vision_command_state(state)
+    fake = fake_holder["client"]
+    assert fake.read_holding_registers_calls == [(22, 2, 7)]
+    assert fake.write_registers_calls == [
+        (20, [COMMAND_RUN_CLOCKWISE, 55], 7),
+        (24, [1, COLOR_GREEN, EVENT_CUBE_DETECTED], 7),
+    ]
 
 
 def test_command_write_plan_blocks_all_commands_while_emergency_stopped():

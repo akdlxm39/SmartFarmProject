@@ -78,6 +78,13 @@ class ConveyorMotor:
         self._dir_line.request(consumer="conveyor_dir", type=gpiod.LINE_REQ_DIR_OUT)
         self._step_line.request(consumer="conveyor_step", type=gpiod.LINE_REQ_DIR_OUT)
         self._enable_line.request(consumer="conveyor_enable", type=gpiod.LINE_REQ_DIR_OUT)
+        LOG.info(
+            "GPIO setup chip=%s dir=%s step=%s enable=%s enable_active_low=True",
+            self.gpio_chip,
+            self.dir_pin,
+            self.step_pin,
+            self.enable_pin,
+        )
         self._set_enable(False)
 
     def _set_line(self, line: object, value: int) -> None:
