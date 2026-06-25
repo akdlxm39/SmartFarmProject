@@ -1,1 +1,0 @@
-"""Conveyor vision test package."""

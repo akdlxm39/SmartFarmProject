@@ -1,7 +1,7 @@
 # ROS2 workspace/src 중심 구조 전환 계획
 
 작성일: 2026-06-25
-상태: 요청 구조 기준 재정리 완료
+상태: skeleton 재배치 완료 / 실제 코드 승격 전
 
 ## 1. 배경
 
@@ -16,11 +16,9 @@ SmartFarmProject/
 └── workspace/
     └── src/
         ├── apps/
-        ├── dobot/
-        ├── turtlebot/
-        ├── realsense/
+        ├── robot/
         ├── vision/
-        ├── conveyor/
+        ├── embedded/
         ├── modbus/
         ├── config/
         └── data/
@@ -34,9 +32,7 @@ SmartFarmProject/
   - `workspaces/` = 개인별 초기 실험/작업 공간
   - `workspace/src/` = 통합 실행 구조
 - `docs/`, `references/`는 루트에 유지한다.
-- 요청 구조 기준으로 `dobot`, `turtlebot`, `realsense`를 `ros2 pkg create --build-type ament_python` 기반 ROS2 package로 재정리했다.
-- `vision/camera1_pi`, `vision/yolo_server`, `conveyor/pi_controller`, `conveyor/gpio`, `conveyor/modbus_client`로 비ROS 보조 프로세스를 분리했다.
-- 원본 `workspaces/`는 개인별 작업 공간으로 보존한다.
+- 실제 코드 승격은 아직 하지 않고, skeleton만 `workspace/src/`로 재배치했다.
 
 ## 3. 새 구조
 
@@ -50,27 +46,17 @@ SmartFarmProject/
 │       │   ├── README.md
 │       │   ├── backend/
 │       │   └── frontend/
-│       ├── dobot/
-│       │   ├── package.xml
-│       │   ├── setup.py
-│       │   └── dobot/
-│       ├── turtlebot/
-│       │   ├── package.xml
-│       │   ├── setup.py
+│       ├── robot/
+│       │   ├── README.md
+│       │   ├── dobot/
 │       │   └── turtlebot/
-│       ├── realsense/
-│       │   ├── package.xml
-│       │   ├── setup.py
-│       │   └── realsense/
 │       ├── vision/
 │       │   ├── README.md
-│       │   ├── camera1_pi/
-│       │   └── yolo_server/
-│       ├── conveyor/
+│       │   ├── camera1_inspection/
+│       │   └── camera2_conveyor/
+│       ├── embedded/
 │       │   ├── README.md
-│       │   ├── pi_controller/
-│       │   ├── gpio/
-│       │   └── modbus_client/
+│       │   └── conveyor_pi/
 │       ├── modbus/
 │       │   ├── README.md
 │       │   └── shared_server/
@@ -103,30 +89,30 @@ SmartFarmProject/
 ### Vision Camera1
 | 현재 위치 | 이동 후보 |
 |---|---|
-| `workspaces/지웅/vision/pc_jpeg_capture_server.py` | `workspace/src/vision/camera1_pi/` |
-| `workspaces/지웅/vision/raspi_jpeg_capture_client.py` | `workspace/src/vision/camera1_pi/` |
-| `workspaces/지웅/vision/vision_capture_daemon.py` | `workspace/src/vision/camera1_pi/` |
-| `workspaces/지성/yolov_wait/infer_server.py` | `workspace/src/vision/yolo_server/` |
-| `workspaces/지성/yolov_wait/infer_client.py` | `workspace/src/vision/yolo_server/` |
+| `workspaces/지웅/vision/pc_jpeg_capture_server.py` | `workspace/src/vision/camera1_inspection/pc_capture_server/` |
+| `workspaces/지웅/vision/raspi_jpeg_capture_client.py` | `workspace/src/vision/camera1_inspection/pi_camera_client/` |
+| `workspaces/지웅/vision/vision_capture_daemon.py` | `workspace/src/vision/camera1_inspection/pc_capture_server/` |
+| `workspaces/지성/yolov_wait/infer_server.py` | `workspace/src/vision/camera1_inspection/inference/` |
+| `workspaces/지성/yolov_wait/infer_client.py` | `workspace/src/vision/camera1_inspection/inference/` |
 | `workspaces/지성/yolov_wait/best.pt` | `workspace/src/data/models/` 또는 Git LFS/외부 링크 |
 
-### Vision Camera2 / RealSense
+### Vision Camera2 / Conveyor
 | 현재 위치 | 이동 후보 |
 |---|---|
-| `workspaces/지웅/conveyor/scripts/select_conveyor_roi.py` | `workspace/src/realsense/scripts/` |
+| `workspaces/지웅/conveyor/scripts/select_conveyor_roi.py` | `workspace/src/vision/camera2_conveyor/scripts/` |
 | `workspaces/지웅/conveyor/config/conveyor_roi_topview.json` | `workspace/src/config/calibration/conveyor_roi_topview.json` |
-| `workspaces/지웅/ros2_ws/src/conveyor_vision_test/` | `workspace/src/realsense/` |
+| `workspaces/지웅/ros2_ws/src/conveyor_vision_test/` | `workspace/src/vision/camera2_conveyor/ros2_ws/src/conveyor_vision_test/` |
 
 ### Dobot
 | 현재 위치 | 이동 후보 |
 |---|---|
-| `workspaces/지웅/ros2_ws/src/dobot_control_pkg/` | `workspace/src/dobot/` |
+| `workspaces/지웅/ros2_ws/src/dobot_control_pkg/` | `workspace/src/robot/dobot/ros2_ws/src/dobot_control_pkg/` |
 | `workspaces/지웅/ros2_ws/src/dobot_control_pkg/config/dobot_positions_latest.json` | `workspace/src/config/calibration/dobot_positions_latest.json` |
 
 ### Conveyor Pi
 | 현재 위치 | 이동 후보 |
 |---|---|
-| `workspaces/지웅/conveyor/pi_controller/` | `workspace/src/conveyor/pi_controller/` + `workspace/src/conveyor/modbus_client/` |
+| `workspaces/지웅/conveyor/pi_controller/` | `workspace/src/embedded/conveyor_pi/controller/` |
 
 ### Modbus
 | 현재 위치 | 이동 후보 |
@@ -136,15 +122,15 @@ SmartFarmProject/
 ## 5. 주의점
 
 ### ROS2 package 위치
-`workspace/src/` 아래의 ROS2 package는 package root가 바로 `workspace/src/<package_name>/`에 오도록 둔다.
+`workspace/src/` 아래에 모든 것을 두더라도, 실제 `colcon build` 대상은 ROS2 package가 있는 경로여야 한다.
 
-현재 기준:
+따라서 다음 중 하나를 선택해야 한다.
 
-1. `workspace/src/dobot` = Dobot Magician 제어 package
-2. `workspace/src/turtlebot` = TurtleBot SLAM/Nav package skeleton
-3. `workspace/src/realsense` = D435i/RealSense conveyor ROI 감지 package
+1. `workspace/src/robot/dobot/ros2_ws/src/dobot_control_pkg`처럼 기존 ROS2 workspace 구조를 보존한다.
+2. `workspace/src/dobot_control_pkg`처럼 ROS2 package를 바로 `workspace/src` 아래로 끌어올린다.
 
-이 구조에서는 `cd workspace && colcon build --packages-select dobot realsense turtlebot` 형태로 빌드한다.
+현재는 팀별 작업 경로와 맥락을 보존하기 위해 **1번 방식**을 임시 기준으로 둔다.
+추후 빌드가 불편하면 package를 더 평평하게 옮길 수 있다.
 
 ### 비ROS 코드
 Frontend, backend, Modbus server, Raspberry Pi controller는 ROS2 package가 아닐 수 있다.
@@ -154,12 +140,13 @@ Frontend, backend, Modbus server, Raspberry Pi controller는 ROS2 package가 아
 
 1. 현재 변경사항 검토
 2. 이 구조가 맞으면 commit/push
-3. 새 `workspace/src/` 기준으로 테스트/실행 경로 검증
-4. import/path 차이를 발견하면 새 구조 기준으로 수정
-5. 팀원 작업은 `workspaces/`에서 보존하면서 통합 코드는 `workspace/src/`에서 관리
+3. `workspace/src/modbus/shared_server/`부터 실제 코드 승격
+4. 승격 후 smoke test
+5. `workspace/src/embedded/conveyor_pi/` 승격
+6. D435i conveyor vision / Dobot / Camera1 / Web 순서로 진행
 
 ## 7. 결론
 
 새 기준은 다음 한 줄로 정리한다.
 
-> 최종 통합 실행 구조는 `workspace/src/` 아래의 직접 ROS2 package(`dobot`, `turtlebot`, `realsense`)와 기능별 비ROS 폴더로 모으고, `workspaces/`는 개인별 초기 작업 공간으로 유지한다.
+> 최종 통합 실행 구조는 `workspace/src/` 아래에 모으고, `workspaces/`는 개인별 초기 작업 공간으로 유지한다.
