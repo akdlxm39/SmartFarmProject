@@ -1,4 +1,4 @@
 fastapi
 uvicorn
 websockets
-pymodbus==3.9.2
+pymodbus==3.13.1

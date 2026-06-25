@@ -1,5 +1,6 @@
 import logging
-from pymodbus.client import ModbusTcpClient
+import asyncio
+from pymodbus.client import AsyncModbusTcpClient
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -8,21 +9,33 @@ log = logging.getLogger("modbus")
 # pymodbus 라이브러리 자체의 연결 시도 실패 로그(CRITICAL/ERROR) 도배를 방지하기 위해 로그 레벨을 올립니다.
 logging.getLogger("pymodbus").setLevel(logging.WARNING)
 
+# Pymodbus uses zero-based protocol addresses, so 40021 maps to address 20.
+REGISTER_CONVEYOR_COMMAND = 20
+REGISTER_CONVEYOR_STATUS = 22
+
+COMMAND_STOP = 0
+COMMAND_RUN_CLOCKWISE = 1
+
+STATUS_IDLE = 0
+STATUS_RUNNING = 1
+
 
 class ConveyorModbusClient:
-    def __init__(self, host='192.168.110.107', port=50200):
+    def __init__(self, host='192.168.110.109', port=50200):
         self.host = host
         self.port = port
-        # pymodbus 3.x 에서는 ModbusTcpClient를 사용합니다.
-        self.client = ModbusTcpClient(self.host, port=self.port)
+        self.client = None
         self.is_connected = False
         
         # 실제 장비가 없을 때를 대비한 가상 상태 (Simulation state)
         self.sim_status = "대기중"
 
-    def connect(self):
+    async def connect(self):
+        if self.client is None:
+            self.client = AsyncModbusTcpClient(self.host, port=self.port, timeout=1.0)
+            
         try:
-            self.is_connected = self.client.connect()
+            self.is_connected = await self.client.connect()
             if self.is_connected:
                 log.info(f"Connected to Modbus Server at {self.host}:{self.port}")
             else:
@@ -32,22 +45,21 @@ class ConveyorModbusClient:
             self.is_connected = False
         return self.is_connected
 
-    def read_status(self):
+    async def read_status(self):
         """컨베이어 상태 읽기 (모드버스 통신)"""
         if not self.is_connected:
-            self.connect()
+            await self.connect()
 
         if self.is_connected:
             try:
-                # [수정 필요] 실제 컨베이어 장비의 상태를 읽어올 코일(Coil) 번호를 입력하세요.
-                # 예시: 0번지 코일 1개를 읽어옴
-                result = self.client.read_coils(0, count=1) 
+                # 40023 레지스터(address 22)에서 상태 읽기
+                result = await self.client.read_holding_registers(REGISTER_CONVEYOR_STATUS, count=1, device_id=1) 
                 if result.isError():
-                    log.error(f"Error reading coils")
+                    log.error(f"Error reading holding registers")
                     return "오류"
                 else:
-                    is_running = result.bits[0]
-                    return "운영중" if is_running else "대기중"
+                    status_val = result.registers[0]
+                    return "운영중" if status_val == STATUS_RUNNING else "대기중"
             except Exception as e:
                 log.error(f"Read error: {e}")
                 self.is_connected = False
@@ -56,18 +68,18 @@ class ConveyorModbusClient:
             # 장비가 연결되지 않았다면 가상 상태 반환 (디버깅 용도)
             return self.sim_status
 
-    def write_control(self, is_running: bool):
+    async def write_control(self, is_running: bool):
         """컨베이어 가동/중지 제어 (모드버스 통신)"""
         if not self.is_connected:
-            self.connect()
+            await self.connect()
             
         if self.is_connected:
             try:
-                # [수정 필요] 실제 컨베이어를 제어할 코일 번호를 입력하세요.
-                # 예시: 0번지 코일에 제어값(True/False) 쓰기
-                result = self.client.write_coil(0, is_running)
+                # 40021 레지스터(address 20)에 명령어 쓰기
+                command_val = COMMAND_RUN_CLOCKWISE if is_running else COMMAND_STOP
+                result = await self.client.write_register(REGISTER_CONVEYOR_COMMAND, command_val, device_id=1)
                 if result.isError():
-                    log.error(f"Error writing coil")
+                    log.error(f"Error writing register")
                     return False
                 return True
             except Exception as e:
@@ -79,9 +91,13 @@ class ConveyorModbusClient:
             self.sim_status = "운영중" if is_running else "대기중"
             return True
 
-    def close(self):
+    async def close(self):
         if self.is_connected:
-            self.client.close()
+            close_func = getattr(self.client, "close", None)
+            if close_func is not None:
+                maybe = close_func()
+                if hasattr(maybe, "__await__"):
+                    await maybe
             self.is_connected = False
             log.info("Modbus connection closed")
 

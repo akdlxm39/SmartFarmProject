@@ -1,3 +1,4 @@
+import platform
 import asyncio
 import json
 from contextlib import asynccontextmanager
@@ -31,7 +32,7 @@ manager = ConnectionManager()
 async def status_poller():
     while True:
         # 모드버스를 통해 컨베이어 상태 조회
-        status = modbus_service.read_status()
+        status = await modbus_service.read_status()
         
         # 현재 시간 문자열 포맷
         now_str = datetime.now().strftime("%H:%M:%S")
@@ -50,7 +51,7 @@ async def status_poller():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 모드버스 클라이언트 초기 연결 시도
-    modbus_service.connect()
+    await modbus_service.connect()
     # 백그라운드에서 주기적으로 모드버스 상태를 읽어 프론트엔드로 브로드캐스팅
     poller_task = asyncio.create_task(status_poller())
     yield
@@ -60,7 +61,7 @@ async def lifespan(app: FastAPI):
         await poller_task
     except asyncio.CancelledError:
         pass
-    modbus_service.close()
+    await modbus_service.close()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -88,7 +89,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 is_running = (action == "start")
                 
                 # 모드버스 제어 코일 쓰기
-                success = modbus_service.write_control(is_running)
+                success = await modbus_service.write_control(is_running)
                 
                 # 제어 결과를 클라이언트들에게 알림
                 await manager.broadcast({
