@@ -20,16 +20,18 @@ SSAFY에서 학습한 임베디드 로봇, 비전 AI, 컨베이어 제어, Turtl
 
 ## 통합 폴더 구조
 
-통합 실행 구조는 ROS2 workspace 관례에 맞춰 `workspace/src/` 아래에 모읍니다.
+최종 통합 실행 구조는 ROS2 workspace 관례에 맞춰 `workspace/src/` 아래에 둡니다. 단, 현재 진행 중인 작업 코드는 `workspaces/`에서 계속 작업하고, 검증된 시점에 아래 구조로 승격합니다.
 
 ```text
 SmartFarmProject/
 ├── workspace/              # 통합 ROS2 workspace
 │   └── src/
-│       ├── apps/           # web frontend/backend
-│       ├── robot/          # Dobot, TurtleBot
-│       ├── vision/         # Camera1 inspection, Camera2 conveyor vision
-│       ├── embedded/       # Raspberry Pi / GPIO / device clients
+│       ├── apps/           # frontend/backend
+│       ├── dobot/          # Dobot ROS2 package
+│       ├── turtlebot/      # TurtleBot ROS2 package
+│       ├── realsense/      # D435i/RealSense ROS2 package
+│       ├── vision/         # Camera1 Pi, YOLO server 등 비ROS 비전 보조 프로세스
+│       ├── conveyor/       # Raspberry Pi/GPIO/Modbus client 컨베이어 제어
 │       ├── modbus/         # shared Modbus TCP register layer
 │       ├── config/         # calibration, register maps
 │       └── data/           # samples, models
@@ -40,37 +42,76 @@ SmartFarmProject/
 
 `workspaces/`는 팀원별 초기 작업 공간으로 유지하고, 검증된 코드는 `workspace/src/` 아래 공통 구조로 단계적으로 승격합니다.
 
+## `workspace/src` 목표 구조
+
+```text
+workspace/
+└── src/
+    ├── apps/
+    │   ├── backend/
+    │   └── frontend/
+    ├── dobot/
+    │   ├── package.xml
+    │   ├── setup.py
+    │   └── dobot/
+    ├── turtlebot/
+    │   ├── package.xml
+    │   ├── setup.py
+    │   └── turtlebot/
+    ├── realsense/
+    │   ├── package.xml
+    │   ├── setup.py
+    │   └── realsense/
+    ├── vision/
+    │   ├── camera1_pi/
+    │   ├── yolo_server/
+    │   └── README.md
+    ├── conveyor/
+    │   ├── pi_controller/
+    │   ├── gpio/
+    │   ├── modbus_client/
+    │   └── README.md
+    ├── modbus/
+    │   └── shared_server/
+    ├── config/
+    │   ├── calibration/
+    │   └── register_maps/
+    └── data/
+        ├── models/
+        └── samples/
+```
+
 ## 공통 실행 구조
 
 ### `workspace/src/apps/`
 - `workspace/src/apps/frontend/`: Vue 기반 관제 대시보드
 - `workspace/src/apps/backend/`: API/WebSocket/DB 연동 서버
+- 초기 승격 후보: `workspaces/효진/smartfarm-pjt/`
 
-초기 승격 후보:
-- `workspaces/효진/smartfarm-pjt/`
+### `workspace/src/dobot/`
+- Dobot Magician ROS2 수확/촬영/분기 제어 package 위치
+- `package.xml`, `setup.py`, `dobot/` Python package를 직접 둔다.
+- 초기 승격 후보: `workspaces/지웅/ros2_ws/src/dobot_control_pkg/`
 
-### `workspace/src/robot/`
-- `workspace/src/robot/dobot/`: Dobot Magician ROS2 수확/촬영/분기 제어
-- `workspace/src/robot/turtlebot/`: TurtleBot SLAM/Navigation/배송 흐름
+### `workspace/src/turtlebot/`
+- TurtleBot SLAM/Navigation/배송 흐름 ROS2 package 위치
+- `package.xml`, `setup.py`, `turtlebot/` Python package를 직접 둔다.
 
-초기 승격 후보:
-- `workspaces/지웅/ros2_ws/src/dobot_control_pkg/`
+### `workspace/src/realsense/`
+- D435i/RealSense 기반 컨베이어 감지 ROS2 package 위치
+- `package.xml`, `setup.py`, `realsense/` Python package를 직접 둔다.
+- 초기 승격 후보: `workspaces/지웅/ros2_ws/src/conveyor_vision_test/`
 
 ### `workspace/src/vision/`
-- `workspace/src/vision/camera1_inspection/`: 1번 카메라, 3방향 촬영, 작물 종류/정상불량 판정
-- `workspace/src/vision/camera2_conveyor/`: 2번 D435i, top-view ROI 기반 컨베이어 흐름 확인
+- `workspace/src/vision/camera1_pi/`: 1번 카메라, 3방향 촬영, Pi Camera socket/JPG capture
+- `workspace/src/vision/yolo_server/`: YOLO inference server/client
+- 초기 승격 후보: `workspaces/지웅/vision/`, `workspaces/지성/yolov_wait/`
 
-초기 승격 후보:
-- `workspaces/지웅/vision/`
-- `workspaces/지성/yolov_wait/`
-- `workspaces/지웅/conveyor/`
-- `workspaces/지웅/ros2_ws/src/conveyor_vision_test/`
-
-### `workspace/src/embedded/`
-- `workspace/src/embedded/conveyor_pi/`: Raspberry Pi Modbus client + GPIO motor control
-
-초기 승격 후보:
-- `workspaces/지웅/conveyor/pi_controller/`
+### `workspace/src/conveyor/`
+- `workspace/src/conveyor/pi_controller/`: Raspberry Pi motor/servo 제어 로직
+- `workspace/src/conveyor/gpio/`: GPIO 진단/테스트 도구
+- `workspace/src/conveyor/modbus_client/`: Pi/PC 측 Modbus client 연동 코드
+- 초기 승격 후보: `workspaces/지웅/conveyor/pi_controller/`, `workspaces/지웅/conveyor/scripts/`
 
 ### `workspace/src/modbus/`
 - `workspace/src/modbus/shared_server/`: 공통 Modbus TCP server/register map
@@ -131,8 +172,8 @@ docs/
 
 - 1번 카메라: 메인 판정 카메라
 - 2번 카메라: 컨베이어 흐름 확인용 RGB-D/D435i 보조 비전 카메라
-- 컨베이어 MVP: RGB 프레임 + top-view 보정 + 단일 ROI + 빨강/초록 HSV 감지
-- 컨베이어 제어: 큐브가 ROI 안에 보이면 Raspberry Pi/Modbus TCP로 시계방향 구동, 10프레임 연속 미검출되면 정지
+- 컨베이어 MVP: RGB 프레임 + raw ROI 기본, top-view는 fallback
+- 컨베이어 제어: 큐브가 ROI 안에 보이면 Raspberry Pi/Modbus TCP로 시계방향 구동, 안정 미검출 시 정지
 - Modbus server: `192.168.110.109:50200` shared register layer
 - Raspberry Pi: 컨베이어 GPIO 제어와 실제 모터 상태 write(`40023/40024`)
 - PC vision/manual client: 명령/비전 상태 write(`40021/40022/40025~40027`)
@@ -140,13 +181,17 @@ docs/
 - 정상 수거 상자: 컨베이어 끝
 - 컨베이어 끝 구조: 낙하 방식
 - 시뮬레이션: 현실 구현과 다르게 3열 분류 구조 유지
-- 통합 실행 구조: `workspace/src/` 아래에 apps/robot/vision/embedded/modbus/config/data를 둔다.
+- 통합 실행 구조: `workspace/src/` 아래에 `apps/dobot/turtlebot/realsense/vision/conveyor/modbus/config/data`를 둔다.
 
 ## 다음 정리 예정
 
-1. Modbus server를 `workspace/src/modbus/shared_server/`로 승격
-2. Conveyor Pi controller를 `workspace/src/embedded/conveyor_pi/`로 승격
-3. D435i conveyor vision을 `workspace/src/vision/camera2_conveyor/`로 승격
-4. Dobot ROS2 package를 `workspace/src/robot/dobot/`으로 승격
-5. Camera1/Pi Camera/JPG capture와 YOLO inference를 `workspace/src/vision/camera1_inspection/`으로 통합
-6. frontend/backend prototype을 `workspace/src/apps/`로 승격
+현재 작업 내용은 그대로 `workspaces/`에서 진행한다. 나중에 통합 요청이 오면 아래 순서로 선별 승격한다.
+
+1. Frontend/backend prototype을 `workspace/src/apps/`로 승격
+2. Dobot ROS2 package를 `workspace/src/dobot/`으로 승격
+3. TurtleBot ROS2 package를 `workspace/src/turtlebot/`으로 승격
+4. D435i/RealSense ROS2 package를 `workspace/src/realsense/`로 승격
+5. Camera1/Pi Camera/JPG capture와 YOLO inference를 `workspace/src/vision/camera1_pi/`, `workspace/src/vision/yolo_server/`로 분리
+6. Conveyor Pi/GPIO/Modbus client 코드를 `workspace/src/conveyor/` 하위로 분리
+7. Modbus server를 `workspace/src/modbus/shared_server/`로 승격
+8. Calibration/register/model 파일을 `workspace/src/config/`, `workspace/src/data/`로 정리
