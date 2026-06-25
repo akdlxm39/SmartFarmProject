@@ -31,9 +31,9 @@ const updateTime = () => {
 
 // Crop Data
 const crops = ref([
-  { id: "tomato", label: "토마토", good: 450, defect: 12, color: "#f44336" },
-  { id: "carrot", label: "당근", good: 380, defect: 4, color: "#ff9800" },
-  { id: "radish", label: "무", good: 454, defect: 15, color: "#8bc34a" },
+  { id: "tomato", label: "토마토", good: 0, defect: 0, color: "#f44336" },
+  { id: "carrot", label: "당근", good: 0, defect: 0, color: "#ff9800" },
+  { id: "radish", label: "무", good: 0, defect: 0, color: "#8bc34a" },
 ]);
 
 // Computed Stats
@@ -140,6 +140,20 @@ const initWebSocket = () => {
         }
         conveyor.lastUpdate = message.data.timestamp;
       }
+      
+      if (message.data.crop_counts) {
+        const counts = message.data.crop_counts;
+        const tomato = crops.value.find(c => c.id === "tomato");
+        if (tomato && counts.tomato) {
+          tomato.good = counts.tomato.good;
+          tomato.defect = counts.tomato.bad;
+        }
+        const radish = crops.value.find(c => c.id === "radish");
+        if (radish && counts.radish) {
+          radish.good = counts.radish.good;
+          radish.defect = counts.radish.bad;
+        }
+      }
     } else if (message.type === "control_result") {
       if (message.data.success) {
         addLog(
@@ -160,13 +174,14 @@ const initWebSocket = () => {
 };
 
 const initVisionWebSocket = () => {
-  wsVision = new WebSocket("ws://192.168.110.109:58765");
+  wsVision = new WebSocket("ws://192.168.110.109:28765");
 
   wsVision.onopen = () => {
     addLog("success", "[시스템] 비전 시스템 연동 완료");
   };
 
   let isFirstFrameReceived = false;
+  let previousVisionEvent = 0; // 0 = EVENT_NONE
 
   wsVision.onmessage = (event) => {
     const message = JSON.parse(event.data);
@@ -180,6 +195,22 @@ const initVisionWebSocket = () => {
         conveyorVisionImage.value = `data:image/jpeg;base64,${message.image_jpeg_base64}`;
       }
       conveyorDetections.value = message.detections;
+
+      // 카메라 화면에 잠깐 스칠 때가 아니라, 컨베이어 벨트에 안정적으로 놓여졌을 때(EVENT_CUBE_DETECTED) 로깅
+      if (message.modbus_state) {
+        const currentEvent = message.modbus_state.last_vision_event;
+        const color = message.modbus_state.cube_color;
+
+        // 1 = EVENT_CUBE_DETECTED (물체가 놓여짐 상태로 새로 진입했을 때만 1회 트리거)
+        if (currentEvent === 1 && previousVisionEvent !== 1) {
+          if (color === 1) { // 1 = COLOR_RED
+            addLog("success", "AI 비전: 토마토 인식");
+          } else if (color === 2) { // 2 = COLOR_GREEN
+            addLog("success", "AI 비전: 무 인식");
+          }
+        }
+        previousVisionEvent = currentEvent;
+      }
     }
   };
 
@@ -475,6 +506,8 @@ const handleWheel = (event) => {
 </template>
 
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+
 /* Globals & Variables */
 :root {
   --slate-50: #f8fafc;
@@ -510,7 +543,10 @@ const handleWheel = (event) => {
 }
 
 body {
-  font-family: "Noto Sans KR", "Malgun Gothic", sans-serif;
+  font-family: 'Jua', sans-serif;
+  font-size: 17px;
+  font-weight: 400; /* 배민 주아체 기본 굵기로 초기화 (브라우저의 가짜 볼드 방지) */
+  -webkit-font-smoothing: antialiased; /* 글씨 렌더링을 부드럽게 하여 약간 얇아 보이게 함 */
   background-color: var(--slate-50);
   color: var(--slate-800);
   margin: 0;
@@ -536,7 +572,7 @@ body {
 }
 .sf-title {
   font-size: 1.5rem;
-  font-weight: 700;
+  font-weight: 400;
   margin: 0;
   letter-spacing: -0.025em;
   color: var(--slate-800);
@@ -556,7 +592,7 @@ body {
   align-items: center;
   gap: 8px;
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 400;
   padding: 6px 12px;
   background-color: var(--emerald-50);
   color: var(--emerald-600);
@@ -571,7 +607,7 @@ body {
 }
 .sf-time-badge {
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--slate-600);
   padding: 6px 12px;
   background-color: white;
@@ -663,7 +699,7 @@ body {
 
 .sf-stat-trend {
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 400;
   padding: 4px 8px;
   border-radius: 9999px;
 }
@@ -679,7 +715,7 @@ body {
 .sf-stat-title {
   color: var(--slate-500);
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 400;
   margin: 0 0 4px 0;
 }
 .sf-stat-value-group {
@@ -689,12 +725,12 @@ body {
 }
 .sf-stat-value {
   font-size: 1.75rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--slate-800);
 }
 .sf-stat-unit {
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--slate-400);
 }
 
@@ -715,7 +751,7 @@ body {
 }
 .sf-panel-title {
   font-size: 1.125rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--slate-800);
   display: flex;
   align-items: center;
@@ -732,7 +768,7 @@ body {
   background: none;
   border: none;
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--indigo-600);
   cursor: pointer;
   display: flex;
@@ -758,7 +794,7 @@ body {
 }
 .sf-section-label {
   font-size: 0.875rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--slate-500);
   margin: 0 0 4px 4px;
   text-transform: uppercase;
@@ -811,7 +847,7 @@ body {
 
 .sf-device-name {
   font-size: 0.875rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--slate-800);
   margin: 0 0 4px 0;
 }
@@ -833,7 +869,7 @@ body {
 }
 .sf-device-status-text {
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--slate-500);
 }
 .sf-status-dot-small {
@@ -872,7 +908,7 @@ body {
   border: none;
   padding: 16px;
   border-radius: 12px;
-  font-weight: 700;
+  font-weight: 400;
   font-size: 1rem;
   cursor: pointer;
   box-shadow: 0 4px 6px -1px rgba(153, 27, 27, 0.3);
@@ -934,7 +970,7 @@ body {
   border: 1px solid var(--slate-200);
   padding: 16px;
   border-radius: 12px;
-  font-weight: 700;
+  font-weight: 400;
   font-size: 1rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -978,7 +1014,7 @@ body {
 }
 .sf-log-time {
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--slate-400);
   padding-top: 2px;
   white-space: nowrap;
@@ -1083,7 +1119,7 @@ body {
   top: 16px;
   left: 16px;
   color: white;
-  font-weight: 700;
+  font-weight: 400;
   font-size: 0.75rem;
   background-color: rgba(0, 0, 0, 0.6);
   padding: 6px 10px;
@@ -1128,7 +1164,7 @@ body {
 .cctv-modal-header h2 {
   margin: 0;
   font-size: 1.125rem;
-  font-weight: 600;
+  font-weight: 400;
 }
 .btn-close {
   background: none;
@@ -1184,7 +1220,7 @@ body {
   border-radius: 8px;
   cursor: pointer;
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 400;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -1197,7 +1233,7 @@ body {
   transform: scale(0.95);
 }
 .zoom-level {
-  font-weight: 700;
+  font-weight: 400;
   min-width: 60px;
   text-align: center;
   font-size: 1rem;

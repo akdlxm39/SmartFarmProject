@@ -68,6 +68,39 @@ class ConveyorModbusClient:
             # 장비가 연결되지 않았다면 가상 상태 반환 (디버깅 용도)
             return self.sim_status
 
+    async def read_crop_counts(self):
+        """작물 수확 개수(토마토, 무 양품/불량) 읽기"""
+        if not self.is_connected:
+            await self.connect()
+
+        if self.is_connected:
+            try:
+                # 40081 (address 80) 부터 12개 레지스터 읽기 (Tomato Good/Bad ~ Radish Good/Bad)
+                result = await self.client.read_holding_registers(80, count=12, device_id=1)
+                if result.isError():
+                    log.error("Error reading crop count registers")
+                    return None
+                else:
+                    regs = result.registers
+                    # u32 형식으로 결합: LO + (HI << 16)
+                    counts = {
+                        "tomato": {
+                            "good": regs[0] + (regs[1] << 16),
+                            "bad": regs[2] + (regs[3] << 16)
+                        },
+                        "radish": {
+                            "good": regs[8] + (regs[9] << 16),
+                            "bad": regs[10] + (regs[11] << 16)
+                        }
+                    }
+                    return counts
+            except Exception as e:
+                log.error(f"Read crop counts error: {e}")
+                self.is_connected = False
+                return None
+        else:
+            return None
+
     async def write_control(self, is_running: bool):
         """컨베이어 가동/중지 제어 (모드버스 통신)"""
         if not self.is_connected:

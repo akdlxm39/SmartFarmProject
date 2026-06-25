@@ -34,6 +34,9 @@ async def status_poller():
         # 모드버스를 통해 컨베이어 상태 조회
         status = await modbus_service.read_status()
         
+        # 작물 수확 개수(토마토, 무 양품/불량) 조회
+        crop_counts = await modbus_service.read_crop_counts()
+        
         # 현재 시간 문자열 포맷
         now_str = datetime.now().strftime("%H:%M:%S")
         
@@ -41,6 +44,7 @@ async def status_poller():
             "type": "conveyor_status",
             "data": {
                 "status": status,
+                "crop_counts": crop_counts,
                 "timestamp": now_str
             }
         })
