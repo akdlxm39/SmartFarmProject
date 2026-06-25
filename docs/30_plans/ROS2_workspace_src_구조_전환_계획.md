@@ -1,7 +1,7 @@
 # ROS2 workspace/src 중심 구조 전환 계획
 
 작성일: 2026-06-25
-상태: skeleton 재배치 완료 / 실제 코드 승격 전
+상태: 1차 코드 승격 완료
 
 ## 1. 배경
 
@@ -32,7 +32,7 @@ SmartFarmProject/
   - `workspaces/` = 개인별 초기 실험/작업 공간
   - `workspace/src/` = 통합 실행 구조
 - `docs/`, `references/`는 루트에 유지한다.
-- 실제 코드 승격은 아직 하지 않고, skeleton만 `workspace/src/`로 재배치했다.
+- 1차 코드 승격을 완료했고, 원본 `workspaces/`는 개인별 작업 공간으로 보존한다.
 
 ## 3. 새 구조
 
@@ -140,10 +140,9 @@ Frontend, backend, Modbus server, Raspberry Pi controller는 ROS2 package가 아
 
 1. 현재 변경사항 검토
 2. 이 구조가 맞으면 commit/push
-3. `workspace/src/modbus/shared_server/`부터 실제 코드 승격
-4. 승격 후 smoke test
-5. `workspace/src/embedded/conveyor_pi/` 승격
-6. D435i conveyor vision / Dobot / Camera1 / Web 순서로 진행
+3. 새 `workspace/src/` 기준으로 테스트/실행 경로 검증
+4. import/path 차이를 발견하면 새 구조 기준으로 수정
+5. 팀원 작업은 `workspaces/`에서 보존하면서 통합 코드는 `workspace/src/`에서 관리
 
 ## 7. 결론
 

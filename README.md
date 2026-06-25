@@ -142,11 +142,13 @@ docs/
 - 시뮬레이션: 현실 구현과 다르게 3열 분류 구조 유지
 - 통합 실행 구조: `workspace/src/` 아래에 apps/robot/vision/embedded/modbus/config/data를 둔다.
 
-## 다음 정리 예정
+## 현재 통합 구조 반영 상태
 
 1. Modbus server를 `workspace/src/modbus/shared_server/`로 승격
-2. Conveyor Pi controller를 `workspace/src/embedded/conveyor_pi/`로 승격
+2. Conveyor Pi controller를 `workspace/src/embedded/conveyor_pi/controller/`로 승격
 3. D435i conveyor vision을 `workspace/src/vision/camera2_conveyor/`로 승격
 4. Dobot ROS2 package를 `workspace/src/robot/dobot/`으로 승격
 5. Camera1/Pi Camera/JPG capture와 YOLO inference를 `workspace/src/vision/camera1_inspection/`으로 통합
 6. frontend/backend prototype을 `workspace/src/apps/`로 승격
+
+상세 매핑은 `workspace/src/MIGRATION_MAP.md`를 기준으로 확인합니다.

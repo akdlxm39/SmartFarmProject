@@ -1,0 +1,81 @@
+{
+  "schema_version": 2,
+  "created_at": "2026-06-25T05:06:16.952683+00:00",
+  "purpose": "SmartFarmProject conveyor direct raw-frame ROI detection without top-view warping",
+  "source": {
+    "source_type": "ros_topic",
+    "topic": "/camera/camera/color/image_raw",
+    "encoding": "rgb8",
+    "width": 1280,
+    "height": 720,
+    "step": 3840,
+    "frame_id": "camera_color_optical_frame",
+    "stamp": {
+      "sec": 1782363925,
+      "nanosec": 571324219
+    },
+    "calibration_method": "live_ros_frame_space_to_freeze"
+  },
+  "raw_frame": {
+    "width": 1280,
+    "height": 720,
+    "channels": 3
+  },
+  "raw_roi": {
+    "coordinate_space": "raw",
+    "point_order_mode": "click",
+    "quad_xy_tl_tr_br_bl": [
+      [
+        286,
+        69
+      ],
+      [
+        430,
+        69
+      ],
+      [
+        373,
+        319
+      ],
+      [
+        186,
+        319
+      ]
+    ],
+    "xyxy": [
+      186,
+      69,
+      430,
+      319
+    ]
+  },
+  "runtime_defaults": {
+    "perspective_mode": "raw",
+    "cube_colors": [
+      "red",
+      "green"
+    ],
+    "red_green_same_meaning": true,
+    "disappear_stable_frames": 10,
+    "motor_direction": "clockwise",
+    "websocket": {
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 8765,
+      "payload": "JSON with detections and image_jpeg_base64"
+    },
+    "modbus": {
+      "mode": "tcp",
+      "library": "pymodbus==3.13.1"
+    }
+  },
+  "preview_files": {
+    "raw_roi": "/home/ssafy/work/SmartFarmProject/workspaces/지웅/conveyor/config/previews/conveyor_roi_raw_raw_roi.png",
+    "raw_frame": "/home/ssafy/work/SmartFarmProject/workspaces/지웅/conveyor/config/previews/conveyor_roi_raw_raw_frame.png"
+  },
+  "notes": [
+    "This config intentionally skips perspective/top-view warping.",
+    "Use raw_roi.quad_xy_tl_tr_br_bl or raw_roi.xyxy for OpenCV detection in the original D435i color frame.",
+    "If the D435i position, resolution, or color stream topic changes, rerun this selector."
+  ]
+}

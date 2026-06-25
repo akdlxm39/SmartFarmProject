@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-06-24T03:15:21.917301+00:00",
+  "purpose": "SmartFarmProject conveyor top-view and single ROI calibration",
+  "source": {
+    "source_type": "ros_topic",
+    "topic": "/camera/camera/color/image_raw",
+    "encoding": "rgb8",
+    "width": 1280,
+    "height": 720,
+    "step": 3840,
+    "frame_id": "camera_color_optical_frame",
+    "stamp": {
+      "sec": 1782270669,
+      "nanosec": 310454346
+    },
+    "calibration_method": "live_ros_frame_space_to_freeze"
+  },
+  "raw_frame": {
+    "width": 1280,
+    "height": 720,
+    "channels": 3
+  },
+  "topview": {
+    "enabled": true,
+    "source_quad_raw_xy_tl_tr_br_bl": [
+      [
+        259,
+        54
+      ],
+      [
+        983,
+        54
+      ],
+      [
+        1208,
+        600
+      ],
+      [
+        30,
+        608
+      ]
+    ],
+    "size_wh": [
+      1280,
+      720
+    ],
+    "output_size_mode": "raw",
+    "point_order_mode": "click",
+    "source_padding_ratio": 0.0,
+    "perspective_matrix_raw_to_topview": [
+      [
+        1.8588671469259712,
+        0.76837649214088,
+        -522.9389216294342
+      ],
+      [
+        -1.882232412609537e-16,
+        2.248218348605193,
+        -121.4037908246804
+      ],
+      [
+        -1.3051328650396002e-05,
+        0.0012050602131209876,
+        1.0
+      ]
+    ]
+  },
+  "conveyor_roi": {
+    "coordinate_space": "topview",
+    "quad_xy_tl_tr_br_bl": [
+      [
+        63,
+        20
+      ],
+      [
+        311,
+        21
+      ],
+      [
+        305,
+        458
+      ],
+      [
+        52,
+        450
+      ]
+    ],
+    "xyxy": [
+      52,
+      20,
+      311,
+      458
+    ]
+  },
+  "runtime_defaults": {
+    "cube_colors": [
+      "red",
+      "green"
+    ],
+    "red_green_same_meaning": true,
+    "disappear_stable_frames": 10,
+    "motor_direction": "clockwise",
+    "modbus": {
+      "mode": "tcp",
+      "library": "pymodbus==3.13.1"
+    }
+  },
+  "preview_files": {
+    "raw_topview_quad": "/home/ssafy/work/SmartFarmProject/workspaces/지웅/conveyor/config/previews/conveyor_roi_topview_raw_topview_quad.png",
+    "topview_roi": "/home/ssafy/work/SmartFarmProject/workspaces/지웅/conveyor/config/previews/conveyor_roi_topview_topview_roi.png",
+    "topview_image": "/home/ssafy/work/SmartFarmProject/workspaces/지웅/conveyor/config/previews/conveyor_roi_topview_topview.png"
+  },
+  "notes": [
+    "Use conveyor_roi.xyxy or conveyor_roi.quad_xy_tl_tr_br_bl for OpenCV detection in the warped top-view frame.",
+    "If the camera position changes, rerun this selector and overwrite/regenerate the JSON."
+  ]
+}
