@@ -8,26 +8,45 @@
 workspace/
 └── src/
     ├── apps/
-    ├── robot/
+    │   ├── backend/
+    │   └── frontend/
+    ├── dobot/
+    │   ├── package.xml
+    │   ├── setup.py
+    │   └── dobot/
+    ├── turtlebot/
+    │   ├── package.xml
+    │   ├── setup.py
+    │   └── turtlebot/
+    ├── realsense/
+    │   ├── package.xml
+    │   ├── setup.py
+    │   └── realsense/
     ├── vision/
-    ├── embedded/
+    │   ├── camera1_pi/
+    │   ├── yolo_server/
+    │   └── README.md
+    ├── conveyor/
+    │   ├── pi_controller/
+    │   ├── gpio/
+    │   ├── modbus_client/
+    │   └── README.md
     ├── modbus/
+    │   └── shared_server/
     ├── config/
+    │   ├── calibration/
+    │   └── register_maps/
     └── data/
+        ├── models/
+        └── samples/
 ```
 
 ## 운영 원칙
 
-- `workspace/src/` 아래에 통합 대상 코드를 모읍니다.
-- ROS2 package는 각 subsystem 하위에 위치시키되, 필요한 경우 `colcon` 빌드 대상이 되도록 package 경로를 정리합니다.
+- ROS2 package는 `workspace/src/` 바로 아래에 둡니다.
+- `dobot`, `turtlebot`, `realsense`는 `/opt/ros/humble` 환경에서 `ros2 pkg create --build-type ament_python`로 만든 구조를 기준으로 합니다.
+- 비ROS 보조 프로세스는 `vision/`, `conveyor/`, `modbus/`, `apps/`에 기능별로 둡니다.
 - `workspaces/`는 팀원별 초기 실험/개인 작업 공간으로 유지합니다.
-- 검증된 코드는 `workspaces/`에서 `workspace/src/`로 순차적으로 승격합니다. 현재 1차 승격본은 `workspace/src/MIGRATION_MAP.md`를 기준으로 확인합니다.
+- 검증된 코드는 `workspaces/`에서 `workspace/src/`로 순차적으로 승격합니다.
 
-## 1차 승격 완료 영역
-
-1. `workspace/src/modbus/shared_server/`
-2. `workspace/src/embedded/conveyor_pi/controller/`
-3. `workspace/src/vision/camera2_conveyor/`
-4. `workspace/src/robot/dobot/`
-5. `workspace/src/vision/camera1_inspection/`
-6. `workspace/src/apps/frontend`, `workspace/src/apps/backend`
+상세 이동 매핑은 `workspace/src/MIGRATION_MAP.md`를 참고합니다.

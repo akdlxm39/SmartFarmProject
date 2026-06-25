@@ -19,3 +19,8 @@ Thumbs.db
 .cache/
 dist/
 build/
+
+# ROS2 / colcon generated outputs
+**/build/
+**/install/
+**/log/

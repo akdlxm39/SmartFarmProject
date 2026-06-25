@@ -2,7 +2,7 @@
 
 이 폴더는 SmartFarmProject의 **Modbus TCP server / shared register layer**를 관리하는 중앙 작업공간이다.
 
-- workspace: `/home/ssafy/work/SmartFarmProject/workspaces/지웅/modbus`
+- workspace: `/home/ssafy/work/SmartFarmProject/workspace/src/modbus/shared_server`
 - server endpoint: `192.168.110.109:50200`
 - Python Modbus: `pymodbus==3.13.1`
 - 역할: 컨베이어, 추후 Dobot, TurtleBot, 농장 상태를 함께 담는 shared holding-register layer
@@ -32,7 +32,7 @@
 ## 환경 준비
 
 ```bash
-cd /home/ssafy/work/SmartFarmProject/workspaces/지웅/modbus
+cd /home/ssafy/work/SmartFarmProject/workspace/src/modbus/shared_server
 uv venv .venv --python 3.11
 source .venv/bin/activate
 uv pip install -r requirements.txt
@@ -43,7 +43,7 @@ uv pip install -r requirements.txt
 현재 PC가 `192.168.110.109/24` 주소를 가지고 있으므로 기본값 그대로 실행한다.
 
 ```bash
-cd /home/ssafy/work/SmartFarmProject/workspaces/지웅/modbus
+cd /home/ssafy/work/SmartFarmProject/workspace/src/modbus/shared_server
 source .venv/bin/activate
 python modbus_server.py --host 192.168.110.109 --port 50200 --print-register-map
 ```
@@ -55,7 +55,7 @@ python modbus_server.py --host 192.168.110.109 --port 50200 --print-register-map
 다른 터미널에서:
 
 ```bash
-cd /home/ssafy/work/SmartFarmProject/workspaces/지웅/modbus
+cd /home/ssafy/work/SmartFarmProject/workspace/src/modbus/shared_server
 source .venv/bin/activate
 python modbus_client_smoke.py --host 192.168.110.109 --port 50200 --write-demo
 ```
@@ -78,9 +78,9 @@ WRITE DEMO OK 40021/40022=[0, 0]
 
 기존 운영 코드와 register ownership은 아래 작업물에서 온 내용을 통합했다.
 
-- `workspaces/지웅/ros2_ws/src/conveyor_vision_test/conveyor_vision_test/conveyor_modbus.py`
-- `workspaces/지웅/conveyor/pi_controller/register_map.py`
-- `workspaces/지웅/conveyor/pi_controller/conveyor_modbus_client_controller.py`
+- `workspace/src/realsense/realsense/conveyor_modbus.py`
+- `workspace/src/conveyor/modbus_client/register_map.py`
+- `workspace/src/conveyor/modbus_client/conveyor_modbus_client_controller.py`
 
 ## 안전 규칙
 
