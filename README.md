@@ -20,41 +20,45 @@ SSAFY에서 학습한 임베디드 로봇, 비전 AI, 컨베이어 제어, Turtl
 
 ## 통합 폴더 구조
 
-현재 `workspaces/`는 팀원별 초기 작업 공간으로 유지하고, 통합 가능한 코드는 아래 공통 구조로 단계적으로 승격합니다.
+통합 실행 구조는 ROS2 workspace 관례에 맞춰 `workspace/src/` 아래에 모읍니다.
 
 ```text
 SmartFarmProject/
-├── apps/                  # web frontend/backend
-├── robot/                 # Dobot, TurtleBot
-├── vision/                # Camera1 inspection, Camera2 conveyor vision
-├── embedded/              # Raspberry Pi / GPIO / device clients
-├── modbus/                # shared Modbus TCP register layer
-├── config/                # calibration, register maps
-├── data/                  # samples, models
-├── docs/                  # project docs
-├── references/            # planning/reference inputs
-└── workspaces/            # 개인별 초기 작업 공간
+├── workspace/              # 통합 ROS2 workspace
+│   └── src/
+│       ├── apps/           # web frontend/backend
+│       ├── robot/          # Dobot, TurtleBot
+│       ├── vision/         # Camera1 inspection, Camera2 conveyor vision
+│       ├── embedded/       # Raspberry Pi / GPIO / device clients
+│       ├── modbus/         # shared Modbus TCP register layer
+│       ├── config/         # calibration, register maps
+│       └── data/           # samples, models
+├── docs/                   # project docs
+├── references/             # planning/reference inputs
+└── workspaces/             # 개인별 초기 작업 공간
 ```
+
+`workspaces/`는 팀원별 초기 작업 공간으로 유지하고, 검증된 코드는 `workspace/src/` 아래 공통 구조로 단계적으로 승격합니다.
 
 ## 공통 실행 구조
 
-### `apps/`
-- `apps/frontend/`: Vue 기반 관제 대시보드
-- `apps/backend/`: API/WebSocket/DB 연동 서버
+### `workspace/src/apps/`
+- `workspace/src/apps/frontend/`: Vue 기반 관제 대시보드
+- `workspace/src/apps/backend/`: API/WebSocket/DB 연동 서버
 
 초기 승격 후보:
 - `workspaces/효진/smartfarm-pjt/`
 
-### `robot/`
-- `robot/dobot/`: Dobot Magician ROS2 수확/촬영/분기 제어
-- `robot/turtlebot/`: TurtleBot SLAM/Navigation/배송 흐름
+### `workspace/src/robot/`
+- `workspace/src/robot/dobot/`: Dobot Magician ROS2 수확/촬영/분기 제어
+- `workspace/src/robot/turtlebot/`: TurtleBot SLAM/Navigation/배송 흐름
 
 초기 승격 후보:
 - `workspaces/지웅/ros2_ws/src/dobot_control_pkg/`
 
-### `vision/`
-- `vision/camera1_inspection/`: 1번 카메라, 3방향 촬영, 작물 종류/정상불량 판정
-- `vision/camera2_conveyor/`: 2번 D435i, top-view ROI 기반 컨베이어 흐름 확인
+### `workspace/src/vision/`
+- `workspace/src/vision/camera1_inspection/`: 1번 카메라, 3방향 촬영, 작물 종류/정상불량 판정
+- `workspace/src/vision/camera2_conveyor/`: 2번 D435i, top-view ROI 기반 컨베이어 흐름 확인
 
 초기 승격 후보:
 - `workspaces/지웅/vision/`
@@ -62,14 +66,14 @@ SmartFarmProject/
 - `workspaces/지웅/conveyor/`
 - `workspaces/지웅/ros2_ws/src/conveyor_vision_test/`
 
-### `embedded/`
-- `embedded/conveyor_pi/`: Raspberry Pi Modbus client + GPIO motor control
+### `workspace/src/embedded/`
+- `workspace/src/embedded/conveyor_pi/`: Raspberry Pi Modbus client + GPIO motor control
 
 초기 승격 후보:
 - `workspaces/지웅/conveyor/pi_controller/`
 
-### `modbus/`
-- `modbus/shared_server/`: 공통 Modbus TCP server/register map
+### `workspace/src/modbus/`
+- `workspace/src/modbus/shared_server/`: 공통 Modbus TCP server/register map
 
 현재 기준:
 - endpoint: `192.168.110.109:50200`
@@ -81,13 +85,13 @@ SmartFarmProject/
 초기 승격 후보:
 - `workspaces/지웅/modbus/`
 
-### `config/`
-- `config/calibration/`: Dobot 좌표, conveyor ROI 등 최신 calibration 기준 파일
-- `config/register_maps/`: register map 문서/설정
+### `workspace/src/config/`
+- `workspace/src/config/calibration/`: Dobot 좌표, conveyor ROI 등 최신 calibration 기준 파일
+- `workspace/src/config/register_maps/`: register map 문서/설정
 
-### `data/`
-- `data/samples/`: 작은 샘플 데이터
-- `data/models/`: 모델 파일 관리 위치
+### `workspace/src/data/`
+- `workspace/src/data/samples/`: 작은 샘플 데이터
+- `workspace/src/data/models/`: 모델 파일 관리 위치
 
 주의: 대형 모델 파일과 runtime capture 결과는 Git LFS/Release asset/외부 저장소 사용을 검토합니다.
 
@@ -108,13 +112,14 @@ docs/
 - `docs/10_architecture/시스템_데이터_흐름_초안.md`
 - `docs/10_architecture/아키텍처_보강_계획.md`
 - `docs/30_plans/프로젝트_폴더_구조_정리_계획.md`
+- `docs/30_plans/ROS2_workspace_src_구조_전환_계획.md`
 - `docs/40_logs/진행_로그.md`
 - `docs/40_logs/작업_결정_메모.md`
 - `docs/diagrams/smartfarm_architecture_summary_v2.excalidraw`
 
 ## 개인 작업 폴더
 
-초기 개발 단계에서는 팀원별 작업물을 `workspaces/`에 올리고, 뼈대가 잡힌 코드는 공통 구조로 승격합니다.
+초기 개발 단계에서는 팀원별 작업물을 `workspaces/`에 올리고, 뼈대가 잡힌 코드는 `workspace/src/` 공통 구조로 승격합니다.
 
 - `workspaces/지성/`
 - `workspaces/지웅/`
@@ -135,12 +140,13 @@ docs/
 - 정상 수거 상자: 컨베이어 끝
 - 컨베이어 끝 구조: 낙하 방식
 - 시뮬레이션: 현실 구현과 다르게 3열 분류 구조 유지
+- 통합 실행 구조: `workspace/src/` 아래에 apps/robot/vision/embedded/modbus/config/data를 둔다.
 
 ## 다음 정리 예정
 
-1. Modbus server를 `modbus/shared_server/`로 승격
-2. Conveyor Pi controller를 `embedded/conveyor_pi/`로 승격
-3. D435i conveyor vision을 `vision/camera2_conveyor/`로 승격
-4. Dobot ROS2 package를 `robot/dobot/`으로 승격
-5. Camera1/Pi Camera/JPG capture와 YOLO inference를 `vision/camera1_inspection/`으로 통합
-6. frontend/backend prototype을 `apps/`로 승격
+1. Modbus server를 `workspace/src/modbus/shared_server/`로 승격
+2. Conveyor Pi controller를 `workspace/src/embedded/conveyor_pi/`로 승격
+3. D435i conveyor vision을 `workspace/src/vision/camera2_conveyor/`로 승격
+4. Dobot ROS2 package를 `workspace/src/robot/dobot/`으로 승격
+5. Camera1/Pi Camera/JPG capture와 YOLO inference를 `workspace/src/vision/camera1_inspection/`으로 통합
+6. frontend/backend prototype을 `workspace/src/apps/`로 승격
