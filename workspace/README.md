@@ -2,9 +2,9 @@
 
 이 폴더는 SmartFarmProject의 통합 실행 workspace입니다.
 
-현재 작업 내용은 `workspaces/`에서 계속 관리하고, 검증된 시점에 `workspace/src/` 아래 목표 구조로 선별 승격합니다.
+`workspaces/`에 있던 지금까지의 코드를 `workspace/src/` 아래 목표 구조로 선별 승격했습니다. 원본 `workspaces/`는 작업 이력/개인 작업 공간으로 보존합니다.
 
-## 목표 구조
+## 현재 구조
 
 ```text
 workspace/
@@ -45,13 +45,12 @@ workspace/
 
 ## 운영 원칙
 
-- `workspace/src/` 아래에 통합 대상 코드를 모읍니다.
+- 통합 실행 기준은 `workspace/src/`입니다.
 - ROS2 package는 `workspace/src/dobot`, `workspace/src/turtlebot`, `workspace/src/realsense`처럼 `workspace/src` 바로 아래에 둡니다.
 - 비ROS 보조 프로세스는 `vision/`, `conveyor/`, `apps/`, `modbus/` 하위로 분리합니다.
-- `workspaces/`는 팀원별 초기 실험/개인 작업 공간으로 유지합니다.
-- 검증된 코드는 요청 시점에 `workspaces/`에서 `workspace/src/`로 순차적으로 승격합니다.
+- 상세 원본→통합 위치는 `workspace/src/MIGRATION_MAP.md`를 기준으로 합니다.
 
-## 다음 승격 순서
+## 통합된 주요 영역
 
 1. `workspace/src/apps/frontend`, `workspace/src/apps/backend`
 2. `workspace/src/dobot/`

@@ -1,0 +1,10 @@
+incoming_videos*/
+incoming_jpegs*/
+captures/
+captures_jpg/
+smoke_tmp/
+smoke_tmp_jpeg/
+smoke_tmp*/
+*.part
+__pycache__/
+.venv/

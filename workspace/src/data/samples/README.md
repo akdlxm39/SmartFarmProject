@@ -1,5 +1,5 @@
-# Samples
+# samples
 
-작은 샘플 이미지/테스트 입력만 보관합니다.
+통합 테스트용 소형 샘플 데이터를 두는 위치입니다.
 
-대량 capture 결과는 Git에 올리지 않습니다.
+대형 runtime capture 결과는 Git에 직접 넣지 않습니다.

@@ -1,5 +1,5 @@
-# Backend
+# apps/backend
 
-웹 API, WebSocket, DB 연동, 장치 상태 중계 코드를 둘 예정입니다.
+관제 API/WebSocket/DB/Modbus 연동 서버 후보 구현입니다.
 
-초기 승격 후보: `workspaces/효진/smartfarm-pjt/backend/`
+원본: `workspaces/효진/smartfarm-pjt/backend/`

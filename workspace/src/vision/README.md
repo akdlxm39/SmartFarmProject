@@ -1,6 +1,6 @@
 # vision
 
-비전 처리 계층입니다.
+비ROS 비전 보조 프로세스입니다.
 
-- `camera1_inspection/`: 1번 카메라, 3방향 촬영, 작물 종류/정상불량 판정
-- `camera2_conveyor/`: 2번 D435i, 컨베이어 top-view ROI 흐름 확인
+- `camera1_pi/`: 1번 카메라 JPG capture/socket daemon
+- `yolo_server/`: YOLO inference server/client
